@@ -1,6 +1,7 @@
 ---
 layout: default
-title: About - Francis Luz
+title: About
+permalink: /about/
 ---
 
 <div id="about">
