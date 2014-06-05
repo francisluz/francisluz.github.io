@@ -13,6 +13,31 @@
    Base Styles and Bootstrap Modifications
    ========================================================================== */
 
+/*CUSTON*/
+.background {
+  background: url("../img/bg/sun.jpg") no-repeat center top;
+  text-align:center;
+  background-attachment: relative;
+  background-position: center center;
+  min-height: 800px;
+  width: 100%;
+  opacity: 1;
+  filter: alpha(opacity=100);
+}
+
+.logo {
+  margin-left: 20px;
+}
+
+.menu {
+  margin-top: 20px;
+}
+
+.menu a {
+  color: white;
+}
+/*END CUSTON*/
+
 html,
 button,
 input,
@@ -31,13 +56,6 @@ body {
  * These selection rule sets have to be separate.
  * Customize the background color to match your design.
  */
-
-.background {
-  background-image: url("../img/bg/sun.jpg");
-  background-repeat: no-repeat;
-  opacity: 1;
-  filter: alpha(opacity=100);
-}
 
 ::-moz-selection {
     background: #f2c2c9;
@@ -278,7 +296,7 @@ a:after {
    ========================================================================== */
 
 #headerwrap {
-  background: url(../img/header_bg.jpg) no-repeat center top;
+  //background: url(../img/header_bg.jpg) no-repeat center top;
   margin-top: -50px;
   padding-top:120px;
   text-align:center;
@@ -416,6 +434,15 @@ a:after {
 }
 
 
+.textwhite h1,h2 {
+  color: white;
+}
+
+.textwhite p {
+  color: white;
+  font-size: 25px;
+}
+
 /* Section Dividers Backgrounds */
 
 .divider1 {
@@ -427,7 +454,7 @@ a:after {
 }
 
 .divider3 {
-  background-image: url('../img/bg/divider3.jpg');
+  background-image: url('../img/bg/divider3_francis.jpg');
   margin-top: 0px;
 }
 
