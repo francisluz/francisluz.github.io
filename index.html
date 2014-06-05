@@ -3,6 +3,7 @@ layout: home
 title: Home
 ---
 
+
 <script src="/app/homeControl.js"></script>
 <div ng-app="myApp" ng-controller="HomeCtrl">
 <div class="background" style="background-position: 50% 0px;">
@@ -41,6 +42,7 @@ title: Home
 			<div ng-repeat="post in posts">
 				<div class="col-lg-6">
 		          <div class="blog-content">
+		          <div class="blog-bg" style="height: 200px; background: url([[post.attachments[0].image.url]]) no-repeat center; -webkit-background-size: cover; -moz-background-size: cover; -o-background-size: cover; background-size: cover;"></div>
 		          	<div class="blog-bg"><img ng-src="[[post.attachments[0].image.url]]" style="max-height:200px;"></div>
 		            <h3>[[post.attachments[0].displayName]]</h3>
 		            <p>[[post.attachments[0].content | limitTo:140]]...</p>
