@@ -26,7 +26,11 @@
 }
 
 .logo {
-  margin-left: 20px;
+  margin-left: 0px;
+}
+
+.logo h2 {
+  font-size: 22px;
 }
 
 .menu {
@@ -639,8 +643,9 @@ a:after {
 }
 
 .blog-content {
-  padding-top: 10px;
+  //padding-top: 10px;
   background: #f2f2f2;
+  margin-bottom: 10px;
 }
 
 
