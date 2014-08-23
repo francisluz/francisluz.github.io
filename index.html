@@ -39,14 +39,15 @@ title: Home
         <br>
       </div>
 		<div class="row" style="text-align:center">
-			<div ng-repeat="post in posts">
+			<div ng-repeat="post in posts | limitTo:postLimit">
 				<div class="col-lg-6">
 		          <div class="blog-content">
 		          <div class="blog-bg" style="height: 200px; background: url([[post.attachments[0].image.url]]) no-repeat top; -webkit-background-size: cover; -moz-background-size: cover; -o-background-size: cover; background-size: cover;"></div>
 		          	<!--div class="blog-bg"><img ng-src="[[post.attachments[0].image.url]]" style="max-height:200px;"></div-->
-		            <h3>[[post.attachments[0].displayName]]</h3>
-		            <p>[[post.attachments[0].content | limitTo:140]]...</p>
-		            <p><a href="[[post.attachments[0].url]]" target="blank"><strong> <span class="icon icon-link"></span> Mais</strong></a></p>
+		            <h3><a href="" title="[[post.attachments[0].displayName]]">[[post.attachments[0].displayName | limitTo:42]]</a></h3>
+		            <p ng-show="[[post.attachments[0].content]]">[[post.attachments[0].content | limitTo:140]]...</p>
+		            <p ng-show="[[post.attachments[0].content == null]]"><br><br></p>
+		            <!-- ><a href="[[post.attachments[0].url]]" target="blank"><strong> <span class="icon icon-link"></span> Mais</strong></a></p-->
 		            <br>
 		          </div>
 		        </div><!-- /col -->

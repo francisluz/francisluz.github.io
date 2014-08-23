@@ -12,8 +12,9 @@ myApp.controller('HomeCtrl', function ($scope, $resource, $http) {
   	$scope.descricao = 'Technologic live';
 
   	$scope.posts = [];
+    $scope.postLimit = 8;
 
-	$http.get('https://www.googleapis.com/plus/v1/people/107152405442983389032/activities/public?maxResults=9&key=AIzaSyAk3R-lwNSuZrojcebvKKNHRxBd5RzF6DQ').success(function(data) {
+	$http.get('https://www.googleapis.com/plus/v1/people/107152405442983389032/activities/public?maxResults=40&key=AIzaSyAk3R-lwNSuZrojcebvKKNHRxBd5RzF6DQ').success(function(data) {
     	angular.forEach(data.items, function(post, index) {
           if (post.verb == 'post') 
            $scope.posts.push(post.object);
