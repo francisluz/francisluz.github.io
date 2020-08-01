@@ -64,25 +64,29 @@
        width="463.3988"
        id="rect12"
        style="fill:#000000;stroke-width:0.487594" />
-    <text
-       transform="scale(1.0461409,0.95589419)"
-       id="text16"
-       y="433.45404"
-       x="54.642353"
-       style="font-style:normal;font-weight:normal;font-size:400.27699999999998681px;line-height:1.25;font-family:sans-serif;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:10.007;-inkscape-font-specification:'sans-serif, Normal';font-stretch:normal;font-variant:normal;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;"
-       xml:space="preserve"><tspan
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:400.27700872px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;stroke-width:10.007;"
-         y="433.45404"
-         x="54.642353"
-         id="tspan14"
-         sodipodi:role="line">F</tspan></text>
-    <rect
-       ry="0"
-       y="416.52975"
-       x="291.85547"
-       height="33.037865"
-       width="158.37198"
-       id="rect851"
-       style="fill:#ffffff;stroke-width:0.317252" />
+    <g
+       transform="translate(16.940178,0.71650283)"
+       id="g910">
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:358.083px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:8.95214"
+         x="58.762852"
+         y="402.77692"
+         id="text16"
+         transform="scale(1.0461409,0.95589419)"><tspan
+           sodipodi:role="line"
+           id="tspan14"
+           x="58.762852"
+           y="402.77692"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:358.083px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;stroke-width:8.95214">F</tspan></text>
+      <rect
+         style="fill:#ffffff;stroke-width:0.28381"
+         id="rect851"
+         width="141.6777"
+         height="29.555285"
+         x="271.42682"
+         y="386.97446"
+         ry="0" />
+    </g>
   </g>
 </svg>
