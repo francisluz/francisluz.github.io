@@ -2,6 +2,10 @@ module.exports = {
   purge: ['./components/**/*.tsx', './pages/**/*.tsx'],
   theme: {
     extend: {
+      screens: {
+        light: { raw: "(prefers-color-scheme: light)" },
+        dark: { raw: "(prefers-color-scheme: dark)" }
+      },
       colors: {
         'accent-1': '#FAFAFA',
         'accent-2': '#EAEAEA',
@@ -27,7 +31,30 @@ module.exports = {
       boxShadow: {
         small: '0 5px 10px rgba(0, 0, 0, 0.12)',
         medium: '0 8px 30px rgba(0, 0, 0, 0.12)',
-      },
+        smallDark: '0 5px 10px rgba(255, 255, 255, 0.30)',
+        mediumDark: '0 8px 30px rgba(255, 255, 255, 0.30)',
+      },      
+      fill: theme => ({
+        'red': theme('colors.red.500'),
+        'green': theme('colors.green.500'),
+        'blue': theme('colors.blue.500'),
+      })
     },
   },
+  plugins: [
+    function({ addBase, config }) {
+      addBase({
+        body: {
+          color: config("theme.colors.black"),
+          backgroundColor: config("theme.colors.white")
+        },
+        "@screen dark": {
+          body: {
+            color: config("theme.colors.white"),
+            backgroundColor: config("theme.colors.black")
+          }
+        }
+      });
+    }
+  ]
 }

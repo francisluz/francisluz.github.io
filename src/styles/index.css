@@ -13,3 +13,7 @@
 /* Stop purging. */
 
 /* Your own custom utilities */
+.logo-dark {
+    background-image: url('/images/logo.svg');
+    background-size: cover;
+}
