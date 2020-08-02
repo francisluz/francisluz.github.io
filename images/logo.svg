@@ -7,38 +7,39 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   inkscape:version="1.0 (4035a4f, 2020-05-01)"
-   sodipodi:docname="logo.svg"
-   id="svg8"
-   version="1.1"
-   viewBox="0 0 541.86665 541.86665"
+   width="2048"
    height="2048"
-   width="2048">
+   viewBox="0 0 541.86665 541.86665"
+   version="1.1"
+   id="svg8"
+   sodipodi:docname="logo.svg"
+   inkscape:version="1.0 (4035a4f, 2020-05-01)">
   <defs
      id="defs2" />
   <sodipodi:namedview
-     inkscape:guide-bbox="true"
-     showguides="true"
-     inkscape:snap-text-baseline="false"
-     inkscape:pagecheckerboard="true"
-     units="px"
-     showgrid="false"
-     inkscape:document-rotation="0"
-     inkscape:current-layer="layer1"
-     inkscape:document-units="px"
-     inkscape:cy="846.26179"
-     inkscape:cx="3.7126456"
-     inkscape:zoom="0.36601985"
-     inkscape:pageshadow="2"
-     inkscape:pageopacity="0.0"
-     borderopacity="1.0"
-     bordercolor="#666666"
+     id="base"
      pagecolor="#ffffff"
-     id="base">
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="0.53593467"
+     inkscape:cx="1012.9884"
+     inkscape:cy="1089.2709"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     inkscape:document-rotation="0"
+     showgrid="false"
+     units="px"
+     inkscape:pagecheckerboard="true"
+     inkscape:snap-text-baseline="false"
+     showguides="true"
+     inkscape:guide-bbox="true"
+     inkscape:object-paths="false">
     <sodipodi:guide
-       id="guide22"
+       position="557.86493,111.86633"
        orientation="0,-1"
-       position="419.55356,125.3369" />
+       id="guide22" />
   </sodipodi:namedview>
   <metadata
      id="metadata5">
@@ -53,40 +54,39 @@
     </rdf:RDF>
   </metadata>
   <g
-     id="layer1"
+     inkscape:label="Layer 1"
      inkscape:groupmode="layer"
-     inkscape:label="Layer 1">
+     id="layer1">
     <rect
-       ry="22.67857"
-       y="47.624985"
-       x="40.821423"
-       height="458.86307"
-       width="463.3988"
+       style="fill:#000000;stroke-width:0.487594"
        id="rect12"
-       style="fill:#000000;stroke-width:0.487594" />
+       width="463.3988"
+       height="458.86307"
+       x="40.821423"
+       y="47.624985"
+       ry="50.419716" />
     <g
-       transform="translate(16.940178,0.71650283)"
-       id="g910">
-      <text
-         xml:space="preserve"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:358.083px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:8.95214"
-         x="58.762852"
-         y="402.77692"
-         id="text16"
-         transform="scale(1.0461409,0.95589419)"><tspan
-           sodipodi:role="line"
-           id="tspan14"
-           x="58.762852"
-           y="402.77692"
-           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:358.083px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;stroke-width:8.95214">F</tspan></text>
+       id="g25"
+       transform="matrix(0.93106865,0,0,0.91600133,5.9777419,35.488812)">
       <rect
-         style="fill:#ffffff;stroke-width:0.28381"
+         ry="0"
+         y="390.50916"
+         x="324.40414"
+         height="26.020596"
+         width="126.59819"
          id="rect851"
-         width="141.6777"
-         height="29.555285"
-         x="271.42682"
-         y="386.97446"
-         ry="0" />
+         style="fill:#ffffff;stroke-width:0.251728" />
+      <g
+         aria-label="F"
+         transform="matrix(1.0748919,0,0,0.93032612,10.583333,0)"
+         id="text16"
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:384.12px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:9.60307">
+        <path
+           sodipodi:nodetypes="ccccccccccc"
+           d="M 291.90459,161.85708 H 149.28373 v 91.76952 h 123.53039 l -0.005,36.95296 H 149.28373 V 421.24277 H 103.23582 V 119.21614 H 291.5457 Z"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:384.12px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Bold';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;stroke-width:9.60307"
+           id="path132" />
+      </g>
     </g>
   </g>
 </svg>
