@@ -38,6 +38,7 @@ const Meta = () => {
       />
       <meta property="og:image" content={HOME_OG_IMAGE_URL} />
       <meta name="apple-mobile-web-app-title" content="Francis Luz"></meta>
+      <meta name="apple-mobile-web-app-status-bar-style" content="default"></meta>
     </Head>
   )
 }
