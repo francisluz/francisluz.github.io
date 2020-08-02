@@ -11,6 +11,7 @@ type PostType = {
     url: string
   }
   content: string
+  hero: boolean
 }
 
 export default PostType
