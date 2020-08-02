@@ -39,6 +39,7 @@ const Meta = () => {
       <meta property="og:image" content={HOME_OG_IMAGE_URL} />
       <meta name="apple-mobile-web-app-title" content="Francis Luz"></meta>
       <meta name="apple-mobile-web-app-status-bar-style" content="default"></meta>
+      <meta name="apple-mobile-web-app-capable" content="yes"></meta>
       {/*iOS Splashscreen Light */}
       <link 
         href="splashscreens-light/iphone5_splash.png" 
@@ -121,7 +122,7 @@ const Meta = () => {
         href="splashscreens-dark/ipadpro2_splash.png" 
         media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (prefers-color-scheme: dark)" 
         rel="apple-touch-startup-image" />
-        
+
     </Head>
   )
 }
