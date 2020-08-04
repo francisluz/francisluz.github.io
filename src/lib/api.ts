@@ -62,7 +62,5 @@ export function getPosts(fields: string[] = []) {
   posts.hero = allPosts.filter((post) => (Boolean(post.hero) === true)).shift() || {}
   posts.stories = allPosts.filter((post) => (Boolean(post.hero) === false)) || []
 
-  console.log(posts)
-
   return posts
 }
