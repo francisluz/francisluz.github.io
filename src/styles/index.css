@@ -13,3 +13,15 @@
 /* Stop purging. */
 
 /* Your own custom utilities */
+
+/* ul {
+    @apply list-disc;
+    margin: 10;
+    padding: 10;
+} */
+
+ol, ul {
+    list-style: disc;
+    margin: auto !important;
+    padding: revert !important;
+}

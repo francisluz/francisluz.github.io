@@ -36,7 +36,7 @@ const Meta = () => {
         name="description"
         content={`Francis Luz - I'm Full-Stack software engineer.`}
       />
-      <meta property="og:image" content={HOME_OG_IMAGE_URL} />
+      <meta property="og:image" content="/favicon/apple-touch-icon.png" />
       <meta name="apple-mobile-web-app-title" content="Francis Luz"></meta>
       <meta name="apple-mobile-web-app-capable" content="yes"></meta>
       <meta name="apple-mobile-web-app-status-bar-style" content="default"></meta>
