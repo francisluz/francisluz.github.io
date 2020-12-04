@@ -14,7 +14,7 @@
     "classnames": "2.2.6",
     "date-fns": "2.10.0",
     "gray-matter": "4.0.2",
-    "highlight.js": "^10.1.2",
+    "highlight.js": "^10.4.1",
     "next": "latest",
     "react": "^16.13.0",
     "react-dom": "^16.13.0",
