@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Francis Luz — Software Engineer</title>
+    <meta
+      name="description"
+      content="Francis Luz — Brazilian software engineer in Dublin. 20+ years shipping software, from BASIC to AI agent marketplaces. Currently building Sokosumi at UTXO.AG."
+    />
+    <meta property="og:title" content="Francis Luz — Software Engineer" />
+    <meta
+      property="og:description"
+      content="20+ years shipping software, from BASIC to AI agents. Type HELP."
+    />
+    <meta property="og:image" content="https://francisluz.com/assets/bg_moster.webp" />
+    <meta property="og:url" content="https://francisluz.com" />
+    <link rel="icon" type="image/png" href="/assets/avatar_pixel.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+    <script>
+      // Runs before first paint: skip the boot overlay on repeat visits
+      // so it never flashes in and out of view.
+      try {
+        if (
+          sessionStorage.getItem('booted') ||
+          matchMedia('(prefers-reduced-motion: reduce)').matches
+        ) {
+          document.documentElement.dataset.noBoot = '1';
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body id="top">
+    <!-- C64 boot sequence -->
+    <div id="boot" aria-hidden="true">
+      <div id="boot-screen"></div>
+      <div class="boot-hint">CLICK OR PRESS ANY KEY TO SKIP</div>
+    </div>
+
+    <!-- top bar -->
+    <header class="topbar">
+      <a class="topbar-name" href="#top">FRANCISLUZ<span class="blink">_</span></a>
+      <nav class="topbar-nav">
+        <a href="#ask">ASK</a>
+        <a href="#about">ABOUT</a>
+        <a href="#contact">CONTACT</a>
+      </nav>
+      <div class="topbar-clock window-chip">
+        <span class="chip-dot"></span><span id="clock">…</span>
+      </div>
+    </header>
+
+    <!-- hero -->
+    <section class="hero">
+      <div class="hero-bg" id="bg-a"></div>
+      <div class="hero-bg" id="bg-b"></div>
+      <div class="scanlines" aria-hidden="true"></div>
+      <div class="hero-vignette" aria-hidden="true"></div>
+
+      <div class="hero-card">
+        <div class="win-titlebar">
+          <span class="win-btn"></span>
+          <span class="win-title">HELLO.BAS</span>
+        </div>
+        <div class="hero-card-body">
+          <p class="hero-pre">10 PRINT "HELLO, WORLD. I AM"</p>
+          <h1>FRANCIS<br />LUZ</h1>
+          <p class="hero-sub">
+            Software engineer, 20+ years in. Started with
+            <strong>BASIC on a beige keyboard</strong>; now building
+            <strong>AI agents that pay each other</strong>.
+            Dublin, Ireland · via Brazil.
+          </p>
+          <p class="hero-pre dim">20 GOTO <a class="hero-goto" href="#ask">ASK-ME</a></p>
+        </div>
+      </div>
+
+      <div class="scene-ctrl window-chip">
+        <span id="scene-label">…</span>
+        <button id="scene-btn" type="button" title="Next background">↻ NEXT</button>
+      </div>
+
+      <a class="scroll-hint" href="#ask">▼ PRESS ANY KEY TO CONTINUE ▼</a>
+    </section>
+
+    <!-- terminal -->
+    <section class="section" id="ask">
+      <div class="section-head reveal">
+        <span class="section-num">SECTION 10</span>
+        <h2>ASK THE MACHINE</h2>
+        <p class="section-note">
+          A very small language model. Trained exclusively on one guy.
+        </p>
+      </div>
+
+      <div class="terminal reveal">
+        <div class="win-titlebar">
+          <span class="win-btn"></span>
+          <span class="win-title">ASK-ME 1.0 — SIMULATED AI</span>
+          <span class="win-mem">64K RAM</span>
+        </div>
+        <div class="t-body">
+          <div id="t-screen" role="log" aria-live="polite"></div>
+          <form id="t-form" autocomplete="off">
+            <label for="t-input" class="t-prompt">&gt;</label>
+            <input
+              id="t-input"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="type HELP or ask anything…"
+              aria-label="Terminal input"
+            />
+          </form>
+        </div>
+        <div class="t-chips">
+          <button class="chip" data-cmd="help">HELP</button>
+          <button class="chip" data-cmd="about">ABOUT</button>
+          <button class="chip" data-cmd="work">WORK</button>
+          <button class="chip" data-cmd="skills">SKILLS</button>
+          <button class="chip" data-cmd="does he ride motorcycles?">MOTORCYCLES?</button>
+          <button class="chip" data-cmd="run">RUN</button>
+          <button class="chip" data-cmd="lander">LANDER</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- about -->
+    <section class="section" id="about">
+      <div class="section-head reveal">
+        <span class="section-num">SECTION 20</span>
+        <h2>ABOUT</h2>
+      </div>
+
+      <div class="about-grid">
+        <figure class="avatar-win reveal">
+          <div class="win-titlebar">
+            <span class="win-btn"></span>
+            <span class="win-title">FRANCIS.PIC</span>
+          </div>
+          <div class="avatar-frame">
+            <img src="/assets/avatar.webp" alt="Portrait of Francis Luz" width="640" height="640" />
+            <img
+              class="avatar-pixel"
+              src="/assets/avatar_pixel.png"
+              alt=""
+              aria-hidden="true"
+              width="480"
+              height="480"
+            />
+          </div>
+          <figcaption>HOVER TO RENDER IN 24 COLORS</figcaption>
+        </figure>
+
+        <div class="about-copy reveal">
+          <p>
+            My first program was written in <strong>BASIC</strong>: line numbers,
+            <code>GOTO</code>, and the patience of a cassette tape. A few decades
+            later I'm still at it, just with better hardware. I build products
+            end-to-end, database to pixel.
+          </p>
+          <p>
+            These days I build <strong>Sokosumi</strong>, an AI agent marketplace
+            where agents hire and pay each other in stablecoins. Before that:
+            five years of <strong>cybersecurity engineering at JP Morgan</strong>,
+            government systems in Ireland and Angola, and serverless platforms for
+            iHeart Media and Walmart back in Brazil.
+          </p>
+          <p>
+            Off the clock I work on <strong>Begin Wallet</strong>, an open-source
+            crypto wallet, and ride an Aprilia RS 660. A much-loved Ducati Monster
+            came first. Also, an unreasonable amount of coffee.
+          </p>
+          <dl class="stat-list">
+            <div><dt>LOCATION</dt><dd>DUBLIN, IE</dd></div>
+            <div><dt>UPTIME</dt><dd>20+ YEARS</dd></div>
+            <div><dt>FIRST LANG</dt><dd>BASIC</dd></div>
+            <div><dt>CURRENT LANG</dt><dd>TYPESCRIPT</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- contact / footer -->
+    <footer class="footer" id="contact">
+      <div class="section-head reveal">
+        <span class="section-num">SECTION 30</span>
+        <h2>SAY HELLO</h2>
+      </div>
+      <div class="footer-links reveal">
+        <a href="https://github.com/francisluz" target="_blank" rel="noopener">GITHUB →</a>
+        <a href="https://x.com/francisluz" target="_blank" rel="noopener">X →</a>
+        <a href="https://www.linkedin.com/in/francisluz" target="_blank" rel="noopener">LINKEDIN →</a>
+      </div>
+      <div class="footer-base reveal">
+        <p>© 2026 FRANCIS LUZ · MADE IN DUBLIN WITH 38911 BASIC BYTES FREE</p>
+        <p class="dim">NO COOKIES. NO TRACKING. NO JAVASCRIPT FRAMEWORK WAS HARMED.</p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
