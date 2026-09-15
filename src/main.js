@@ -116,6 +116,22 @@ function initTerminal() {
   );
   io.observe(document.querySelector('.terminal'));
 
+  // Fullscreen ("maximized window") toggle.
+  const termEl = document.querySelector('.terminal');
+  const zoomBtn = document.querySelector('#t-zoom');
+  const input = document.querySelector('#t-input');
+  const setMax = (on) => {
+    termEl.classList.toggle('max', on);
+    document.body.classList.toggle('term-max', on);
+    zoomBtn.textContent = on ? 'EXIT' : 'FULL';
+    terminal.scrollDown();
+    input.focus({ preventScroll: true });
+  };
+  zoomBtn.addEventListener('click', () => setMax(!termEl.classList.contains('max')));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && termEl.classList.contains('max')) setMax(false);
+  });
+
   document.querySelectorAll('.chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       if (terminal.busy) return;

@@ -427,6 +427,52 @@ html[data-no-boot] #boot {
   color: var(--c64-text);
 }
 
+.win-zoom {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--c64-bright);
+  background: none;
+  border: 1px solid var(--c64-frame);
+  padding: 3px 7px;
+  cursor: pointer;
+  flex: none;
+}
+
+.win-zoom:hover {
+  background: var(--c64-frame);
+  color: var(--ink);
+}
+
+/* fullscreen (maximized window) mode */
+.terminal.max {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  box-shadow: none;
+  border-width: 4px;
+}
+
+.terminal.max .t-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal.max #t-screen {
+  height: auto;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+body.term-max {
+  overflow: hidden;
+}
+
 .t-body {
   position: relative;
   padding: 18px 18px 14px;
