@@ -475,6 +475,7 @@ body.term-max {
 
 .t-body {
   position: relative;
+  overflow: hidden;
   padding: 18px 18px 14px;
   font-family: var(--font-crt);
   font-size: clamp(18px, 2.2vw, 22px);
@@ -556,6 +557,51 @@ body.term-max {
   background: var(--c64-bright);
   animation: blink 1s steps(1) infinite;
   flex: none;
+}
+
+/* graphical arcade mode */
+.arcade {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+.arcade canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  background: #000;
+}
+
+.arcade-pads {
+  display: none;
+  gap: 10px;
+  justify-content: center;
+  padding: 10px;
+  background: #000;
+}
+
+@media (pointer: coarse) {
+  .arcade-pads {
+    display: flex;
+  }
+}
+
+.arcade-pads button {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  color: var(--c64-bright);
+  background: none;
+  border: 1px solid var(--c64-frame);
+  padding: 12px 18px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .t-chips {

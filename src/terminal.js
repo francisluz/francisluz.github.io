@@ -1,4 +1,7 @@
 import { RESPONSES, AI_ANSWERS, AI_FALLBACK, EXPERIENCE, PROFILE } from './data.js';
+import { runGame } from './arcade/engine.js';
+import { createSurf } from './arcade/surf.js';
+import { createBmx } from './arcade/bmx.js';
 
 const URL_RE = /(https?:\/\/[^\s]+|[\w.+-]+@[\w-]+\.[\w.]+)/g;
 
@@ -24,17 +27,6 @@ function mazeLines(rows = 6, cols = 38) {
   }
   return lines;
 }
-
-const WAVES = [
-  { art: '<<<<~~~~~-----        A LEFT PEELS ACROSS THE POINT', key: 'l' },
-  { art: '        -----~~~~~>>>>  A RIGHT WALLS UP AHEAD', key: 'r' },
-  { art: '(((( O ))))           THE LIP THROWS. IT IS BARRELING', key: 't' },
-  { art: 'XXXX~~~~XXXX          CLOSEOUT. THE WHOLE WAVE FOLDS', key: 'k' },
-];
-
-const SURF_PRAISE = ['GNARLY.', 'TUBULAR.', 'STYLE POINTS.', 'THE BEACH GOES WILD.', 'RADICAL.'];
-
-const SURF_MOVES = '(L)EFT / (R)IGHT / (T)UBE / (K)ICK OUT:';
 
 const listOutput = () => [
   '10 REM ***** CAREER.BAS *****',
@@ -189,8 +181,7 @@ export class Terminal {
     const cmd = raw.toLowerCase().replace(/[?!.]+$/, '').trim();
 
     if (this.game) {
-      if (this.game.type === 'surf') await this.surfTurn(cmd);
-      else await this.landerTurn(cmd);
+      await this.landerTurn(cmd);
       return;
     }
 
@@ -200,7 +191,12 @@ export class Terminal {
     }
 
     if (cmd === 'surf' || /california/.test(cmd)) {
-      await this.startSurf();
+      await this.playArcade('surf');
+      return;
+    }
+
+    if (cmd === 'bmx' || cmd === 'bike') {
+      await this.playArcade('bmx');
       return;
     }
 
@@ -208,8 +204,9 @@ export class Terminal {
       await this.stream([
         'CASSETTE 1 — GAMES:',
         '',
-        '  LANDER ... land on the moon, 1969 style',
+        '  LANDER ... land on the moon, 1969 style (text)',
         '  SURF ..... shred a gnarly wave, 1987 style',
+        '  BMX ...... backflips over dirt, 1987 style',
         '',
         'TYPE ONE TO LOAD IT.',
       ]);
@@ -357,112 +354,61 @@ export class Terminal {
     await this.stream([...flavor, ...this.landerStatus()], { cps: 600 });
   }
 
-  surfStatus() {
-    const g = this.game;
-    return [
-      `WAVE ${g.round}/8  ·  SCORE ${g.score}  ·  BOARDS ${'▮'.repeat(g.boards)}`,
-      '',
-      WAVES[g.wave].art,
-      '',
-      SURF_MOVES,
-    ];
-  }
-
-  nextWave() {
-    this.game.wave = Math.floor(Math.random() * WAVES.length);
-  }
-
-  async startSurf() {
-    this.game = { type: 'surf', round: 1, score: 0, streak: 0, boards: 3 };
-    this.nextWave();
+  async playArcade(which) {
+    const factory = which === 'surf' ? createSurf : createBmx;
     await this.stream(
       [
-        'SURF — A TOTALLY UNOFFICIAL TRIBUTE TO 1987',
-        '',
-        'READ THE WAVE. PICK THE MOVE. EIGHT WAVES.',
-        '  LEFT PEELING? CARVE (L)EFT.',
-        '  RIGHT WALLING UP? CARVE (R)IGHT.',
-        '  BARRELING? PULL INTO THE (T)UBE.',
-        '  CLOSEOUT? (K)ICK OUT OR EAT SAND.',
-        'WRONG MOVE SNAPS A BOARD. YOU HAVE 3.',
-        '(TYPE QUIT TO PADDLE IN)',
-        '',
-        ...this.surfStatus(),
+        `LOAD "${which.toUpperCase()}",8,1`,
+        'SEARCHING... FOUND. ENTERING GRAPHICS MODE.',
+        which === 'surf'
+          ? 'ARROWS RIDE THE WAVE. STAY IN THE POCKET NEAR THE CREST.'
+          : 'UP JUMPS. LEFT/RIGHT FLIPS MID-AIR. LAND WITH THE SLOPE.',
+        'ESC RETURNS TO BASIC.',
       ],
       { cps: 600 },
     );
-  }
-
-  async endSurf(drowned) {
-    const { score } = this.game;
-    this.game = null;
-    const rank =
-      score >= 900 ? 'RANK: SPONSORED. THE 80S WOULD BE PROUD.'
-      : score >= 600 ? 'RANK: TOTALLY RAD.'
-      : score >= 300 ? 'RANK: WEEKEND SURFER.'
-      : 'RANK: KOOK. THE LIFEGUARD KNOWS YOUR NAME NOW.';
-    await this.stream(
-      [
-        drowned ? 'ALL BOARDS SNAPPED. THE OCEAN WINS TODAY.' : 'SESSION OVER. YOU PADDLE IN, ARMS LIKE NOODLES.',
+    this.busy = true;
+    this.input.blur();
+    const res = await runGame(this.screen.closest('.t-body'), factory);
+    this.busy = false;
+    this.screen.innerHTML = '';
+    const score = Math.round(res.score ?? 0);
+    let lines;
+    if (which === 'surf') {
+      const rank =
+        score >= 2000 ? 'RANK: SPONSORED. THE 80S WOULD BE PROUD.'
+        : score >= 1200 ? 'RANK: TOTALLY RAD.'
+        : score >= 500 ? 'RANK: WEEKEND SURFER.'
+        : 'RANK: KOOK. THE LIFEGUARD KNOWS YOUR NAME NOW.';
+      lines = [
+        res.quit ? 'YOU PADDLE IN EARLY.' : res.wiped ? 'ALL BOARDS SNAPPED. THE OCEAN WINS TODAY.' : 'SESSION OVER. ARMS LIKE NOODLES.',
         '',
         `FINAL SCORE: ${score}`,
         rank,
         '',
         'TYPE SURF TO PADDLE BACK OUT.',
         'READY.',
-      ],
-      { cps: 400 },
-    );
-  }
-
-  async surfTurn(cmd) {
-    const g = this.game;
-
-    if (['quit', 'exit', 'abort', 'clear'].includes(cmd)) {
-      this.game = null;
-      await this.stream(['YOU PADDLE IN. THE WAVES KEEP ROLLING.', 'READY.']);
-      return;
-    }
-
-    const MOVE_WORDS = {
-      l: 'l', left: 'l',
-      r: 'r', right: 'r',
-      t: 't', tube: 't',
-      k: 'k', kick: 'k', 'kick out': 'k',
-    };
-    const move = MOVE_WORDS[cmd];
-    if (!move) {
-      await this.stream(['THAT IS NOT A SURF MOVE.', '', ...this.surfStatus()], { cps: 600 });
-      return;
-    }
-
-    const lines = [];
-    if (move === WAVES[g.wave].key) {
-      g.streak += 1;
-      const points = 100 + (g.streak - 1) * 50;
-      g.score += points;
-      lines.push(`${SURF_PRAISE[Math.floor(Math.random() * SURF_PRAISE.length)]} +${points}${g.streak > 1 ? ` (STREAK X${g.streak})` : ''}`);
+      ];
     } else {
-      g.boards -= 1;
-      g.streak = 0;
-      lines.push('WIPEOUT! THE WAVE FOLDS YOU LIKE A DECKCHAIR.');
-      if (g.boards === 0) {
-        await this.stream(lines, { cps: 500 });
-        await this.endSurf(true);
-        return;
-      }
-      lines.push(`BOARDS LEFT: ${g.boards}.`);
+      const rank =
+        score >= 2200 ? 'RANK: FACTORY TEAM RIDER.'
+        : score >= 1400 ? 'RANK: RAD, IN THE 1986 MOVIE SENSE.'
+        : score >= 600 ? 'RANK: BACKYARD SHREDDER.'
+        : 'RANK: TRAINING WHEELS.';
+      lines = [
+        res.quit ? 'YOU WALK THE BIKE HOME.'
+        : res.finished ? `FINISH LINE! ${res.dist}M OF DIRT CONQUERED.`
+        : 'THIRD CRASH. THE BIKE IS A MODERN ART PIECE NOW.',
+        '',
+        `FINAL SCORE: ${score}`,
+        rank,
+        '',
+        'TYPE BMX TO RIDE AGAIN.',
+        'READY.',
+      ];
     }
-
-    if (g.round === 8) {
-      await this.stream(lines, { cps: 500 });
-      await this.endSurf(false);
-      return;
-    }
-
-    g.round += 1;
-    this.nextWave();
-    await this.stream([...lines, '', ...this.surfStatus()], { cps: 600 });
+    await this.stream(lines, { cps: 450 });
+    this.input.focus({ preventScroll: true });
   }
 
   async boot() {

@@ -90,6 +90,7 @@ export const RESPONSES = {
     '  CONTACT ..... where to find him',
     '  LANDER ...... land on the moon, 1969 style',
     '  SURF ........ shred a gnarly wave, 1987 style',
+    '  BMX ......... backflips over dirt, 1987 style',
     '  CLEAR ....... wipe the screen',
     '',
     'OR JUST ASK ME ANYTHING IN PLAIN ENGLISH.',
