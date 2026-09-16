@@ -365,7 +365,7 @@ export class Terminal {
         `LOAD "${which.toUpperCase()}",8,1`,
         'SEARCHING... FOUND. ENTERING GRAPHICS MODE.',
         which === 'surf'
-          ? 'ARROWS RIDE THE WAVE. STAY IN THE POCKET NEAR THE CREST.'
+          ? 'DOWN DROPS FOR SPEED. UP CLIMBS TO THE LIP. SPACE CARVES. AIR: LEFT/RIGHT SPIN.'
           : 'RIGHT PEDALS. UP JUMPS. DOWN WHEELIES. AIR: LEFT/RIGHT FLIPS. LAND WITH THE SLOPE.',
         hi ? `HI SCORE: ${hi}` : 'NO HI SCORE YET. MAKE HISTORY.',
         'ESC RETURNS TO BASIC.',
@@ -387,12 +387,14 @@ export class Terminal {
     let lines;
     if (which === 'surf') {
       const rank =
-        score >= 2000 ? 'RANK: SPONSORED. THE 80S WOULD BE PROUD.'
-        : score >= 1200 ? 'RANK: TOTALLY RAD.'
-        : score >= 500 ? 'RANK: WEEKEND SURFER.'
+        score >= 9000 ? 'RANK: SPONSORED. THE 80S WOULD BE PROUD.'
+        : score >= 5000 ? 'RANK: TOTALLY RAD.'
+        : score >= 2000 ? 'RANK: WEEKEND SURFER.'
         : 'RANK: KOOK. THE LIFEGUARD KNOWS YOUR NAME NOW.';
       lines = [
-        res.quit ? 'YOU PADDLE IN EARLY.' : res.wiped ? 'ALL BOARDS SNAPPED. THE OCEAN WINS TODAY.' : 'SESSION OVER. ARMS LIKE NOODLES.',
+        res.quit ? 'YOU PADDLE IN EARLY.'
+        : res.wipeouts === 0 ? 'THE CASIO BEEPS. NOT ONE WIPEOUT. LEGEND.'
+        : `THE CASIO BEEPS. ${res.wipeouts} WIPEOUT${res.wipeouts === 1 ? '' : 'S'}. ARMS LIKE NOODLES.`,
         '',
         `FINAL SCORE: ${score}`,
         newHi ? '*** NEW HI SCORE ***' : `HI SCORE: ${Math.max(hi, score)}`,

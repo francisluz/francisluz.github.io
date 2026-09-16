@@ -10,6 +10,7 @@
 //   below the axle line, so ground contact = centre row + WHEEL_R.
 
 import { C, rotationFrames } from './engine.js';
+import { mk as mkGrid, px, line, ellipse, toStrings } from './pixelArt.js';
 
 export const S = 56; // sprite grid size
 export const N_ROT = 24; // 15° rotation steps
@@ -30,36 +31,7 @@ const FRONT = [CX + AXLE_DX, AXLE_Y];
 const BB = [CX, AXLE_Y - 1]; // bottom bracket
 const HAND = [CX + 3, AXLE_Y - 14];
 
-const mk = () => Array.from({ length: S }, () => new Uint8Array(S));
-
-const px = (g, x, y, c) => {
-  x = Math.round(x);
-  y = Math.round(y);
-  if (x >= 0 && x < S && y >= 0 && y < S) g[y][x] = c;
-};
-
-// line in visual space: x in fat px (2 wide), y in rows (1 tall).
-// `thick` widens across the line's dominant axis, so a stroke stays the
-// same weight whether it runs horizontally or vertically.
-const line = (g, x0, y0, x1, y1, c, thick = 1) => {
-  const steps = Math.max(Math.abs((x1 - x0) * 2), Math.abs(y1 - y0), 1) * 2;
-  const steep = Math.abs(y1 - y0) > Math.abs((x1 - x0) * 2);
-  for (let i = 0; i <= steps; i += 1) {
-    const x = x0 + ((x1 - x0) * i) / steps;
-    const y = y0 + ((y1 - y0) * i) / steps;
-    for (let t = 0; t < thick; t += 1) {
-      if (steep) px(g, x + t, y, c);
-      else px(g, x, y + t, c);
-    }
-  }
-};
-
-const ellipse = (g, cx, cy, rx, ry, c) => {
-  for (let dy = -ry; dy <= ry; dy += 1) {
-    const w = Math.floor(rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / (ry * ry))) + 0.3);
-    for (let dx = -w; dx <= w; dx += 1) px(g, cx + dx, cy + dy, c);
-  }
-};
+const mk = () => mkGrid(S);
 
 // wheel like the sheet: fat black tyre, bright disc, blue Y-spokes, hub
 const wheel = (g, cx, cy) => {
@@ -139,9 +111,6 @@ const POSE_DEF = {
   crouch: { hip: [CX - 2, AXLE_Y - 8], sh: [CX + 3, AXLE_Y - 15], head: [CX + 5, AXLE_Y - 19], phi: 0 },
   air: { hip: [CX - 2, AXLE_Y - 9], sh: [CX + 3, AXLE_Y - 17], head: [CX + 5, AXLE_Y - 21], phi: 0 },
 };
-
-const toStrings = (g) =>
-  g.map((row) => Array.from(row, (v) => (v ? String(v) : '.')).join(''));
 
 const buildPose = (def) => {
   const g = mk();
