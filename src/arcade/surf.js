@@ -598,7 +598,7 @@ export function createSurf({ keys, end }) {
     // further right out on the shoulder and left when deep in the pocket
     const focusX = g.wipe ? g.wipe.rider.X : g.X;
     const gap = focusX - wave.breakX;
-    const target = Math.max(56, Math.min(112, 38 + gap * 0.62));
+    const target = Math.max(88, Math.min(112, 68 + gap * 0.5));
     g.screenX += (target - g.screenX) * Math.min(1, 2.2 * dt);
     g.camX = focusX - g.screenX;
 
@@ -612,7 +612,7 @@ export function createSurf({ keys, end }) {
   const draw = (vic) => drawSurf(vic, g);
 
   enterWave();
-  g.screenX = 38 + 60 * 0.62;
+  g.screenX = 98;
   g.camX = g.X - g.screenX;
   say('PADDLE IN...', 1.3);
 

@@ -1,28 +1,19 @@
 // Draws the surf screen from the wave model. Artwork follows the model;
 // the model never looks at the artwork.
 //
-// Layers, back to front: sky, far sea, wave face (dithered bands plus
-// ripple streaks that bend with the lip), the pitching curl, whitewater,
-// foreground chop, then effect sprites on the bitmap (so they colour-clash
-// like the real thing) and the surfer on the hardware-sprite layer.
-// Water animates at 8 fps and foam at 10 fps, not every frame.
+// Four bitmap colors cover sky, sea, wave and effects. The surfer is
+// composited separately. Water and foam use discrete animation frames.
 
 import { W, H, C } from './engine.js';
 import { HORIZON, TROUGH, SESSION } from './surfWave.js';
 import {
   S, N_ROT, COLORS, POSES, BOARD_ROT, FALL_ROT, SWIM, mirrored,
-  FX, FX_COLORS, STREAKS, FOAM, CURTAIN, FAR_SEA, CHOP, FOAM_EDGE,
+  FX, FX_COLORS, FOAM_MASS, FACE_TILES, FACE_BANDS, CURTAIN, FAR_SEA, CHOP, FOAM_EDGE,
 } from './surfSprites.js';
 
 const TAU = Math.PI * 2;
 const frameOf = (ang) => ((Math.round((ang / TAU) * N_ROT) % N_ROT) + N_ROT) % N_ROT;
 const mod = (a, n) => ((a % n) + n) % n;
-
-// 4x4 ordered dither, in fat-pixel space
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
-
-const STREAK_W = STREAKS[0].length;
-const STREAK_H = STREAKS.length;
 
 // a rotated frame facing either way: mirroring a frame for heading a
 // gives heading PI - a, so pick the source frame to land on `ang`
@@ -48,7 +39,10 @@ const blitFx = (vic, grid, x, y, flip) => {
 export function drawSurf(vic, g) {
   const { wave } = g;
   vic.border = C.LIGHTBLUE;
-  vic.bg = C.BLUE;
+  // Keeping cyan as the VIC background lets every ocean cell use the same
+  // three bitmap colours: blue, light blue and white. This avoids the
+  // colour-clash remapper turning a clean face into stippled noise.
+  vic.bg = C.CYAN;
   vic.clear(C.CYAN);
 
   const camX = Math.floor(g.camX);
@@ -66,7 +60,12 @@ export function drawSurf(vic, g) {
 
   const farShift = Math.floor(camX * 0.25) + (wf >> 2);
   const chopShift = Math.floor(camX * 1.15) + wf;
-  const foamTile = FOAM[(ff >> 2) % 2];
+  const massTile = FOAM_MASS[(ff >> 3) % FOAM_MASS.length];
+  const faceTile = FACE_TILES[(wf >> 2) % FACE_TILES.length];
+  const faceBands = FACE_BANDS[(wf >> 3) % FACE_BANDS.length];
+
+  // One flat ocean field gives the hand-authored shapes a firm silhouette.
+  vic.rect(0, HORIZON, W, H - 10 - HORIZON, C.BLUE);
 
   for (let x = 0; x < W; x += 1) {
     const X = camX + x;
@@ -74,103 +73,114 @@ export function drawSurf(vic, g) {
     const faceH = wave.faceH(d);
     const lip = Math.round(TROUGH - faceH);
 
-    // ---- far sea above the wave ----
-    vic.pset(x, HORIZON, C.BLUE);
-    vic.pset(x, HORIZON + 1, C.BLUE);
-    for (let y = HORIZON + 2; y < lip; y += 1) {
-      const row = FAR_SEA[(y - HORIZON) % 8];
-      const c = row[mod(x + farShift + ((y * 5) & 7), row.length)];
-      bmp[y * W + x] = c;
+    // ---- distant sea: a few horizontal marks above the swell ----
+    for (let y = HORIZON; y < Math.max(HORIZON, lip); y += 1) {
+      const row = FAR_SEA[mod(y - HORIZON + (wf >> 2), FAR_SEA.length)];
+      const c = row[mod(x + farShift + y * 3, row.length)];
+      if (c !== C.BLUE) bmp[y * W + x] = c;
     }
 
     if (d < 0) {
-      // ---- whitewater: the broken wave rolling behind the peak ----
-      // a tumbling mound: tallest right behind the peak, slumping away
-      const slump = Math.min(1, -d / 90);
+      // ---- the breaking shoulder on the LEFT ----
+      // The top follows the same face height as the model, then slumps away
+      // from the break. The foam block is deepest at the pitching pocket.
+      const slump = Math.min(1, -d / 96);
       const top = Math.round(
-        TROUGH - wave.faceH(0) * (0.92 - 0.55 * slump)
-        + FOAM_EDGE[mod(X + (ff >> 1), FOAM_EDGE.length)] * 2,
+        TROUGH - wave.faceH(0) + 26 * slump
+        + FOAM_EDGE[mod(X + (ff >> 1), FOAM_EDGE.length)],
       );
-      for (let y = HORIZON + 2; y < top; y += 1) {
-        const row = FAR_SEA[(y - HORIZON) % 8];
-        bmp[y * W + x] = row[mod(x + farShift + ((y * 5) & 7), row.length)];
+      const end = Math.min(TROUGH + 18, H - 10);
+      for (let y = top; y < end; y += 1) {
+        const mass = massTile[mod(y - top + ff, massTile.length)];
+        const c = mass[mod(X + Math.floor((y - top) / 8) + (ff >> 1), mass.length)];
+        if (c !== C.BLUE) bmp[y * W + x] = c;
       }
-      for (let y = top; y < H - 10; y += 1) {
-        const row = foamTile[mod(y + ff, 16)];
-        let c = row[mod(X + ff * 3, 16)];
-        // the foam thins into blue near the bottom of the pile
-        if (y > TROUGH && BAYER[((y & 3) << 2) | (x & 3)] < (y - TROUGH) / 12) c = C.LIGHTBLUE;
-        bmp[y * W + x] = c;
+
+      // A bright diagonal lip sweeps into the break and closes over the
+      // dark pocket. It is an authored curve, not a dithered gradient.
+      if (d > -42) {
+        const q = (d + 42) / 42;
+        const arc = Math.round(top - 3 - 7 * Math.sin(q * Math.PI));
+        for (let k = -1; k <= 1; k += 1) {
+          const yy = arc + k;
+          if (yy > HORIZON + 1 && yy < end) bmp[yy * W + x] = k === 0 ? C.WHITE : C.CYAN;
+        }
+      }
+
+      // The lower foam front curls upward as it approaches the break.
+      if (d > -54) {
+        const q = (d + 54) / 54;
+        const front = Math.round(TROUGH + 18 - 36 * q);
+        for (let k = -1; k <= 1; k += 1) {
+          const yy = front + k;
+          if (yy > top && yy < H - 10) bmp[yy * W + x] = k === 0 ? C.WHITE : C.CYAN;
+        }
+      }
+
+      // Blue tube under the overhang: this narrow hollow gives the
+      // breaking mass its readable California Games curl.
+      if (d > -12) {
+        const q = (d + 12) / 12;
+        const opening = Math.sqrt(1 - (1 - q) ** 2);
+        const tubeTop = Math.round(top + 34 - 20 * opening);
+        const tubeBottom = Math.round(top + 34 + 20 * opening);
+        for (let y = tubeTop; y < tubeBottom; y += 1) bmp[y * W + x] = C.BLUE;
+        if (tubeTop > top && tubeTop < end) bmp[tubeTop * W + x] = C.WHITE;
       }
       continue;
     }
 
-    // ---- wave face ----
-    const pocketDark = 0.3 * Math.exp(-d / 26);
-    for (let y = Math.max(lip, HORIZON + 2); y < TROUGH; y += 1) {
-      const u = TROUGH - y;
-      const f = u / faceH;
-      const shade = f - pocketDark;
-      const b = BAYER[((y & 3) << 2) | (x & 3)];
-      let c;
-      if (y <= lip + 1) {
-        c = (X + (wf >> 1) + y) & 3 ? C.WHITE : C.CYAN; // crest line
-      } else if (shade > 0.94) {
-        c = b < (shade - 0.94) / 0.06 ? C.WHITE : C.CYAN;
-      } else if (shade > 0.74) {
-        c = b < (shade - 0.74) / 0.2 ? C.CYAN : C.LIGHTBLUE;
-      } else if (shade > 0.3) {
-        c = b < (shade - 0.3) / 0.44 ? C.LIGHTBLUE : C.BLUE;
-      } else {
-        c = C.BLUE;
+    // ---- clean playable face on the RIGHT ----
+    const faceTop = Math.max(lip, HORIZON + 2);
+    for (let y = faceTop; y < TROUGH; y += 1) {
+      const row = faceTile[mod(y - faceTop + (wf >> 2), faceTile.length)];
+      const c = row[mod(x + farShift + y * 2, row.length)];
+      if (c !== C.BLUE) bmp[y * W + x] = c;
+
+      const band = faceBands[mod(y - faceTop + (wf >> 2), faceBands.length)];
+      const bc = band[mod(x + (y - faceTop) * 2, band.length)];
+      if (y < faceTop + 16) {
+        bmp[y * W + x] = bc === C.BLUE ? C.LIGHTBLUE : C.CYAN;
+      } else if (y < faceTop + 32 && bc !== C.BLUE) {
+        bmp[y * W + x] = C.LIGHTBLUE;
       }
-      // ripple streaks climb the face as the swell moves through
-      const sr = STREAKS[mod(u + (wf >> 1), STREAK_H)];
-      if (sr[mod(X - (wf >> 2), STREAK_W)]) {
-        c = shade > 0.74 ? C.WHITE : shade > 0.3 ? C.CYAN : C.LIGHTBLUE;
-      }
-      bmp[y * W + x] = c;
     }
 
-    // ---- the curl: the lip pitching forward just ahead of the break ----
-    // A white hook of lip over a dark hollow, closing down to the
-    // falling sheet right at the break.
-    const tube = curl + 10; // drawn hollow matches the X2 scoring zone
+    // A continuous crest is the visual boundary of the playable face.
+    for (let k = -1; k <= 1; k += 1) {
+      const yy = lip + k;
+      if (yy > HORIZON + 1 && yy < TROUGH) bmp[yy * W + x] = k === 0 ? C.WHITE : C.CYAN;
+    }
+
+    // Curved, bright lip and a dark pocket directly beneath it. Both are
+    // anchored to wave.faceH(), so the art follows the physical surface.
+    const tube = curl + 18;
     if (d < tube) {
-      const k = 1 - d / tube;
-      const hook = Math.round(lip - 6 * Math.sin(k * Math.PI));
-      const bottom = Math.round(lip + faceH * 0.85 * k ** 1.4);
-      for (let y = Math.max(hook, HORIZON + 2); y <= bottom; y += 1) {
-        let c;
-        if (y < hook + 3) c = (X + ff + y) & 3 ? C.WHITE : C.CYAN; // the lip
-        else if (y >= bottom - 1) c = (X + ff + y) & 1 ? C.WHITE : C.CYAN; // fringe
-        else if (d < 3) c = CURTAIN[mod(y - ff * 2, 8)][mod(X, 8)]; // falling sheet
-        else {
-          // inside the tube: deep shadow, the odd light streak
-          const sh = CURTAIN[mod(y - ff, 8)][mod(X * 3, 8)];
-          c = sh === C.WHITE && (y & 1) ? C.LIGHTBLUE : C.BLUE;
-        }
-        bmp[y * W + x] = c;
+      const q = Math.max(0, Math.min(1, d / tube));
+      const arc = Math.round(lip - 5 * Math.sin(q * Math.PI));
+      for (let k = -1; k <= 2; k += 1) {
+        const yy = arc + k;
+        if (yy > HORIZON + 1 && yy < TROUGH) bmp[yy * W + x] = k < 1 ? C.WHITE : C.CYAN;
+      }
+      const pocketDepth = Math.round(8 + 17 * (1 - q));
+      for (let y = arc + 3; y < Math.min(TROUGH, arc + pocketDepth); y += 1) {
+        const sh = CURTAIN[mod(y - arc + ff, CURTAIN.length)][mod(X + ff, 8)];
+        bmp[y * W + x] = sh === C.WHITE || sh === C.CYAN ? C.LIGHTBLUE : C.BLUE;
       }
     }
 
-    // ---- lip spray feathering off the crest near the peak ----
-    if (d < curl + 22) {
-      const hgt = 3 - Math.floor((d / (curl + 22)) * 3);
-      for (let y = lip - hgt; y < lip; y += 1) {
-        const c = foamTile[mod(y + ff, 16)][mod(X + ff, 16)];
-        if (c === C.WHITE && y > HORIZON + 1) bmp[y * W + x] = c;
-      }
-    }
-
-    // ---- foreground chop, foamy in front of the break ----
-    const foamy = Math.max(0, 1 - d / (curl + 34));
+    // ---- restrained foreground chop ----
     for (let y = TROUGH; y < H - 10; y += 1) {
-      let c = CHOP[(y - TROUGH) % CHOP.length][mod(x + chopShift, 32)];
-      if (foamy > 0 && BAYER[((y & 3) << 2) | (x & 3)] < foamy) {
-        c = foamTile[mod(y + ff, 16)][mod(X + ff * 3, 16)];
-      }
-      bmp[y * W + x] = c;
+      const c = CHOP[mod(y - TROUGH + ff, CHOP.length)][mod(x + chopShift, 32)];
+      if (c !== C.BLUE) bmp[y * W + x] = c;
+    }
+  }
+
+  // Set the explicit three-colour bitmap palette before the engine's final
+  // constraint pass. Cyan is the background, leaving blue/light-blue/white.
+  for (let cy = 0; cy < H / 8; cy += 1) {
+    for (let cx = 0; cx < W / 4; cx += 1) {
+      vic.setCellPalette(cx, cy, [C.BLUE, C.LIGHTBLUE, C.WHITE]);
     }
   }
 

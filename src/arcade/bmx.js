@@ -13,12 +13,13 @@
 // Airborne: LEFT/RIGHT rotate. Land with both wheels on the slope.
 
 import { W, H, C } from './engine.js';
+import { drawBmxLandscape } from './bmxRender.js';
 import {
   S, N_ROT, AXLE_DX, WHEEL_R, FOOT_Y, COLORS, POSES, BIKE_ROT,
   TUMBLE_ROT, SIT, GETUP,
 } from './bmxSprites.js';
 import {
-  BASE, CANYON_FLOOR, FINISH_X, groundRow, holeAt, solidAfter, canyonTopRow,
+  BASE, CANYON_FLOOR, FINISH_X, groundRow, holeAt, solidAfter,
 } from './bmxTrack.js';
 
 const PXS = 48; // player screen x (30% of 160)
@@ -28,11 +29,6 @@ const MAX_SPEED = 82;
 const PX_PER_M = 4;
 const TIME_LIMIT = 150; // the Casio is unforgiving
 const TAU = Math.PI * 2;
-
-const hash = (n) => {
-  const s = Math.sin(n * 127.1) * 43758.5453;
-  return s - Math.floor(s);
-};
 
 const norm = (a) => {
   let d = a % TAU;
@@ -340,103 +336,15 @@ export function createBmx({ keys, end }) {
 
   // ------------------------------------------------------------- drawing
 
-  const drawCactus = (vic, x, y, h) => {
-    vic.rect(x, y - h, 2, h, C.GREEN);
-    vic.col(x, y - h, y, C.LIGHTGREEN);
-    vic.rect(x - 3, y - h + 5, 3, 2, C.GREEN);
-    vic.rect(x - 3, y - h + 2, 1, 4, C.GREEN);
-    vic.pset(x - 3, y - h + 2, C.LIGHTGREEN);
-    vic.rect(x + 2, y - h + 8, 3, 2, C.GREEN);
-    vic.rect(x + 4, y - h + 5, 1, 4, C.GREEN);
-  };
-
   const draw = (vic) => {
-    vic.border = C.BROWN;
+    vic.border = C.LIGHTBLUE;
     vic.bg = C.ORANGE;
     vic.clear(C.LIGHTBLUE);
 
     const camX = g.wx - PXS;
     const camXi = Math.floor(camX);
     const oy = Math.round(-g.camY);
-    const mtnY = 34 + Math.round(oy * 0.25);
-    const sandTop = mtnY + 4;
-
-    // ---- terrain, column by column ----
-    for (let x = 0; x < W; x += 1) {
-      const wx = camXi + x;
-      // distant mountain silhouette, 0.2x parallax
-      const ridge = mtnY - 5 - Math.floor(hash(Math.floor((camX * 0.2 + x) / 3)) * 9);
-      vic.col(x, ridge, ridge + 3, C.BLACK);
-      vic.col(x, ridge + 3, sandTop, C.DARKGREY);
-
-      const stripe = ((wx % 4) + 4) % 4; // repeated vertical banding
-
-      if (holeAt(wx)) {
-        // canyon gap: sand down to the lower ledge, then the far wall in
-        // shadow — same vertical banding as the track, drained of colour
-        const top = canyonTopRow(wx) + oy;
-        vic.col(x, sandTop, top, C.YELLOW);
-        vic.col(x, top, top + 2, C.BLACK);
-        let wall = C.DARKGREY;
-        if (stripe === 0) wall = C.BLACK;
-        else if (stripe === 2) wall = C.GREY;
-        vic.col(x, top + 2, CANYON_FLOOR + oy, wall);
-        vic.col(x, CANYON_FLOOR + oy, H, C.BLACK);
-        continue;
-      }
-      const gy = groundRow(wx) + oy;
-      vic.col(x, sandTop, gy, C.YELLOW);
-      if (holeAt(wx - 1) || holeAt(wx + 1)) {
-        vic.col(x, gy, H, C.BLACK); // cliff-edge outline at gaps
-        continue;
-      }
-      // riding surface cap; steep downhill faces sit in shadow
-      const shadowed = groundRow(wx + 2) - groundRow(wx - 2) > 2.2;
-      vic.pset(x, gy, shadowed ? C.BROWN : C.LIGHTRED);
-      vic.pset(x, gy + 1, C.ORANGE);
-      // the side wall: burnt red with repeated dark vertical stripes
-      let body = C.RED;
-      if (stripe === 0) body = C.BROWN;
-      else if (stripe === 2) body = C.ORANGE;
-      vic.col(x, gy + 2, H, body);
-    }
-
-    // ---- desert dithering: authored pixel clusters, 0.65x parallax ----
-    const dbase = camX * 0.65;
-    const k0 = Math.floor(dbase / 12) - 1;
-    for (let k = k0; k < k0 + Math.ceil(W / 12) + 2; k += 1) {
-      const sx = Math.floor(k * 12 - dbase + hash(k) * 9);
-      if (sx < 0 || sx >= W) continue;
-      const gy = (holeAt(camXi + sx) ? canyonTopRow(camXi + sx) : groundRow(camXi + sx)) + oy;
-      const sy = sandTop + 4 + Math.floor(hash(k * 3.7) * 110);
-      if (sy > gy - 5) continue;
-      const kind = hash(k * 9.1);
-      if (kind < 0.35) {
-        vic.rect(sx, sy, 2, 1, C.ORANGE); // small rock
-        vic.pset(sx + 1, sy - 1, C.BROWN);
-      } else if (kind < 0.6) {
-        vic.pset(sx, sy, C.BROWN); // stipple cluster
-        vic.pset(sx + 2, sy + 1, C.BROWN);
-        vic.pset(sx + 1, sy + 2, C.ORANGE);
-      } else if (kind < 0.8) {
-        vic.rect(sx, sy - 1, 1, 2, C.GREEN); // scrub
-        vic.pset(sx - 1, sy, C.GREEN);
-        vic.pset(sx + 1, sy, C.GREEN);
-      } else {
-        vic.pset(sx, sy, C.GREY); // pebbles
-        vic.pset(sx + 1, sy, C.LIGHTGREY);
-      }
-    }
-
-    // ---- cacti, 0.55x parallax, always behind the track ----
-    const span = W + 70;
-    for (let i = 0; i < 3; i += 1) {
-      const sx = Math.floor(((((i * 173 - camX * 0.55) % span) + span) % span) - 35);
-      const ty = sandTop + 22 + Math.floor(hash(i * 11.3) * 50);
-      if (sx > -6 && sx < W + 6 && ty < groundRow(camXi + sx) + oy - 5) {
-        drawCactus(vic, sx, ty, 12 + Math.floor(hash(i * 5.1) * 5));
-      }
-    }
+    drawBmxLandscape(vic, camX, oy);
 
     // ---- finish banner ----
     const fx = FINISH_X - camXi;
@@ -456,24 +364,24 @@ export function createBmx({ keys, end }) {
     }
 
     // ---- dust ----
-    for (const d of g.dust) vic.pset(d.x, d.y + oy, C.LIGHTGREY);
+    for (const d of g.dust) vic.pset(d.x - camX, d.y + oy, C.LIGHTGREY);
 
     // ---- rider / crash sprites (hardware-sprite layer) ----
     if (g.crash) {
       const c = g.crash;
       // at rest the bike lies upside down, wheels up, as in the sheet
-      vic.sprite(
+      vic.hsprite(
         BIKE_ROT[c.brest ? N_ROT / 2 : frameOf(c.bspin)],
-        Math.round(c.bx - camX) - S / 2, Math.round(c.by + oy) - S / 2, COLORS,
+        Math.round((c.bx - camX) * 2) - S, Math.round(c.by + oy) - S / 2, COLORS,
       );
       // rider: tumbles while he is moving, then sits up, then stands
       let riderGrid;
       if (c.t > 2.25) riderGrid = GETUP;
       else if (c.t > 1.55) riderGrid = SIT;
       else riderGrid = TUMBLE_ROT[frameOf(-c.t * 7)];
-      vic.sprite(
+      vic.hsprite(
         riderGrid,
-        Math.round(c.rx - camX) - S / 2,
+        Math.round((c.rx - camX) * 2) - S,
         Math.round(c.ry + oy) - FOOT_Y,
         COLORS,
       );
@@ -498,9 +406,9 @@ export function createBmx({ keys, end }) {
       } else {
         pose = 'coast';
       }
-      vic.sprite(
+      vic.hsprite(
         POSES[pose][frameOf(ang)],
-        Math.round(mx - camX) - S / 2, Math.round(my + oy) - S / 2, COLORS,
+        Math.round((mx - camX) * 2) - S, Math.round(my + oy) - S / 2, COLORS,
       );
     }
 

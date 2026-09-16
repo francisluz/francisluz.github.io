@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C64 graphics comparison</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#12151c;color:#eee}
+body{max-width:1200px;margin:48px auto;padding:0 24px}h1{font-size:28px;margin-bottom:8px}p{color:#bbb;line-height:1.6}a{color:#a9d8ed}h2{margin-top:40px;font-size:20px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px}figure{margin:0;background:#080a0e;border:1px solid #343a44;padding:12px}figcaption{font-size:13px;color:#c6cbd1;padding-bottom:10px}img{display:block;width:100%;aspect-ratio:4/3;image-rendering:pixelated}details{margin-top:32px}summary{cursor:pointer}.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}@media(max-width:650px){.pair,.states{grid-template-columns:1fr}body{padding:0 12px;margin-top:24px}}
+</style>
+<h1>C64 graphics comparison</h1>
+<p>Matching game states, before and after. Both images use 4:3 display proportions. <a href="../../#ask">Open the games</a> and choose BMX or SURF.</p>
+<h2>BMX</h2>
+<div class="pair"><figure><figcaption>Before</figcaption><img src="before-bmx.png" alt="Original BMX renderer with a thin road edge and double-width sprite pixels"></figure><figure><figcaption>After</figcaption><img src="after-bmx.png" alt="Updated BMX scene with a broad riding lane, striped wall, detailed rider and compact text"></figure></div>
+<h2>Surf</h2>
+<div class="pair"><figure><figcaption>Before</figcaption><img src="before-surf.png" alt="Original surf renderer"></figure><figure><figcaption>After</figcaption><img src="after-surf.png" alt="Updated surf renderer with authored foam, crest and wave face"></figure></div>
+<details><summary>More positions on the course and wave</summary><div class="states">
+<figure><figcaption>BMX start</figcaption><img src="bmx-start.png" alt="BMX starting position"></figure>
+<figure><figcaption>BMX slope</figcaption><img src="bmx-slope.png" alt="BMX slope"></figure>
+<figure><figcaption>BMX elevated terrain</figcaption><img src="bmx-high.png" alt="BMX elevated terrain"></figure>
+<figure><figcaption>Surf face</figcaption><img src="surf-face.png" alt="Surf open wave face"></figure>
+<figure><figcaption>Surf pocket</figcaption><img src="surf-pocket.png" alt="Surf pocket"></figure>
+<figure><figcaption>Surf shoulder</figcaption><img src="surf-shoulder.png" alt="Surf shoulder"></figure>
+</div></details>
+<p>Native frame: 320 × 200. Palette: 16 C64 colors. This renderer models visual constraints; it does not emulate VIC-II timing or hardware sprite limits.</p>
+</html>

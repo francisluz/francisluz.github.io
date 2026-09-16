@@ -1,18 +1,20 @@
-// VIC-II style graphics engine.
+// Bounded C64-inspired graphics engine.
 //
-// Replicates how C64 games actually drew their screens:
+// Models the useful visual constraints of a C64-style screen:
 // - 160x200 multicolor bitmap with 2:1 fat pixels (shown as 320x200)
 // - the 16-color Pepto palette, nothing else
 // - multicolor attribute constraint: each 4x8 cell may only hold the
 //   shared background color plus 3 others; excess colors are remapped,
 //   producing authentic color clash
-// - hardware-style sprites: multicolor bitmaps composited over the
+// - hardware-style sprite visuals: multicolor bitmaps composited over the
 //   bitmap layer, exempt from cell limits (like the real chip); no
 //   rotation in hardware, so rotated sprites are pre-rendered frames
 // - the border around the screen, and tape-loading raster stripes
+// This is a renderer approximation, not a VIC-II timing or bus emulator.
 
 export const W = 160; // multicolor pixels (each 2 hires pixels wide)
 export const H = 200;
+export const DISPLAY_W = 320;
 
 // Pepto palette
 export const PAL = [
@@ -27,6 +29,12 @@ export const C = {
   YELLOW: 7, ORANGE: 8, BROWN: 9, LIGHTRED: 10, DARKGREY: 11, GREY: 12,
   LIGHTGREEN: 13, LIGHTBLUE: 14, LIGHTGREY: 15,
 };
+
+const CELL_W = 4;
+const CELL_H = 8;
+const CELL_COLS = W / CELL_W;
+const CELL_ROWS = H / CELL_H;
+const TRANSPARENT = 255;
 
 // palette RGB distance table for the attribute-clash remap
 const RGB = PAL.map((h) => [
@@ -45,37 +53,55 @@ for (let a = 0; a < 16; a += 1) {
   }
 }
 
-// 4x6 pixel font, one nibble per row
+// Compact 5x7 font. Each set bit is one native display pixel; the six-pixel
+// advance gives a three-unit width in the 160-wide game coordinate space.
 const FONT = {
-  A: [6, 9, 15, 9, 9, 0], B: [14, 9, 14, 9, 14, 0], C: [7, 8, 8, 8, 7, 0],
-  D: [14, 9, 9, 9, 14, 0], E: [15, 8, 14, 8, 15, 0], F: [15, 8, 14, 8, 8, 0],
-  G: [7, 8, 11, 9, 7, 0], H: [9, 9, 15, 9, 9, 0], I: [7, 2, 2, 2, 7, 0],
-  J: [1, 1, 1, 9, 6, 0], K: [9, 10, 12, 10, 9, 0], L: [8, 8, 8, 8, 15, 0],
-  M: [9, 15, 15, 9, 9, 0], N: [9, 13, 11, 9, 9, 0], O: [6, 9, 9, 9, 6, 0],
-  P: [14, 9, 14, 8, 8, 0], Q: [6, 9, 9, 10, 5, 0], R: [14, 9, 14, 10, 9, 0],
-  S: [7, 8, 6, 1, 14, 0], T: [15, 4, 4, 4, 4, 0], U: [9, 9, 9, 9, 6, 0],
-  V: [9, 9, 9, 10, 4, 0], W: [9, 9, 15, 15, 9, 0], X: [9, 9, 6, 9, 9, 0],
-  Y: [9, 9, 6, 4, 4, 0], Z: [15, 1, 6, 8, 15, 0],
-  0: [6, 9, 11, 13, 6, 0], 1: [2, 6, 2, 2, 7, 0], 2: [6, 9, 2, 4, 15, 0],
-  3: [14, 1, 6, 1, 14, 0], 4: [9, 9, 15, 1, 1, 0], 5: [15, 8, 14, 1, 14, 0],
-  6: [7, 8, 14, 9, 6, 0], 7: [15, 1, 2, 4, 4, 0], 8: [6, 9, 6, 9, 6, 0],
-  9: [6, 9, 7, 1, 6, 0],
-  ' ': [0, 0, 0, 0, 0, 0], ':': [0, 4, 0, 4, 0, 0], '!': [4, 4, 4, 0, 4, 0],
-  '.': [0, 0, 0, 0, 4, 0], '-': [0, 0, 15, 0, 0, 0], '/': [1, 2, 2, 4, 8, 0],
-  '+': [0, 4, 14, 4, 0, 0], '?': [6, 9, 2, 4, 0, 4], '·': [0, 0, 4, 0, 0, 0],
+  A: [14, 17, 17, 31, 17, 17, 17], B: [30, 17, 17, 30, 17, 17, 30],
+  C: [14, 17, 16, 16, 16, 17, 14], D: [30, 17, 17, 17, 17, 17, 30],
+  E: [31, 16, 16, 30, 16, 16, 31], F: [31, 16, 16, 30, 16, 16, 16],
+  G: [14, 17, 16, 23, 17, 17, 14], H: [17, 17, 17, 31, 17, 17, 17],
+  I: [31, 4, 4, 4, 4, 4, 31], J: [1, 1, 1, 1, 17, 17, 14],
+  K: [17, 18, 20, 24, 20, 18, 17], L: [16, 16, 16, 16, 16, 16, 31],
+  M: [17, 27, 21, 17, 17, 17, 17], N: [17, 25, 21, 19, 17, 17, 17],
+  O: [14, 17, 17, 17, 17, 17, 14], P: [30, 17, 17, 30, 16, 16, 16],
+  Q: [14, 17, 17, 17, 21, 18, 13], R: [30, 17, 17, 30, 20, 18, 17],
+  S: [15, 16, 16, 14, 1, 1, 30], T: [31, 4, 4, 4, 4, 4, 4],
+  U: [17, 17, 17, 17, 17, 17, 14], V: [17, 17, 17, 17, 17, 10, 4],
+  W: [17, 17, 17, 17, 21, 27, 17], X: [17, 17, 10, 4, 10, 17, 17],
+  Y: [17, 17, 10, 4, 4, 4, 4], Z: [31, 1, 2, 4, 8, 16, 31],
+  0: [14, 17, 19, 21, 25, 17, 14], 1: [4, 12, 4, 4, 4, 4, 14],
+  2: [14, 17, 1, 2, 4, 8, 31], 3: [30, 1, 1, 14, 1, 1, 30],
+  4: [2, 6, 10, 18, 31, 2, 2], 5: [31, 16, 16, 30, 1, 1, 30],
+  6: [14, 16, 16, 30, 17, 17, 14], 7: [31, 1, 2, 4, 8, 8, 8],
+  8: [14, 17, 17, 14, 17, 17, 14], 9: [14, 17, 17, 15, 1, 1, 14],
+  ' ': [0, 0, 0, 0, 0, 0, 0], ':': [0, 4, 0, 0, 4, 0, 0],
+  '!': [4, 4, 4, 4, 4, 0, 4], '.': [0, 0, 0, 0, 0, 0, 4],
+  '-': [0, 0, 0, 31, 0, 0, 0], '/': [1, 2, 2, 4, 8, 8, 16],
+  '+': [0, 4, 4, 31, 4, 4, 0], '?': [14, 17, 1, 2, 4, 0, 4],
+  '·': [0, 0, 0, 4, 0, 0, 0],
 };
 
 export class Vic {
   constructor() {
     this.bmp = new Uint8Array(W * H);
     this.ovl = new Uint8Array(W * H); // sprite/HUD layer, 255 = transparent
+    this.ovl.fill(TRANSPARENT);
+    this.hiresOvl = new Uint8Array(DISPLAY_W * H); // exact-pixel overlay
+    this.hiresOvl.fill(TRANSPARENT);
+    this.constrained = new Uint8Array(W * H);
+    this.cellPalettes = new Array(CELL_COLS * CELL_ROWS).fill(null);
+    this.rasterBg = new Uint8Array(H);
     this.border = C.LIGHTBLUE;
     this.bg = C.BLUE;
   }
 
-  clear(c) {
+  clear(c = this.bg) {
     this.bmp.fill(c);
-    this.ovl.fill(255);
+    this.ovl.fill(TRANSPARENT);
+    this.hiresOvl.fill(TRANSPARENT);
+    this.constrained.fill(c);
+    this.cellPalettes.fill(null);
+    this.rasterBg.fill(this.bg);
   }
 
   pset(x, y, c) {
@@ -88,6 +114,7 @@ export class Vic {
     const y0 = Math.max(0, y | 0);
     const x1 = Math.min(W, (x + w) | 0);
     const y1 = Math.min(H, (y + h) | 0);
+    if (x1 <= x0 || y1 <= y0) return;
     for (let yy = y0; yy < y1; yy += 1) this.bmp.fill(c, yy * W + x0, yy * W + x1);
   }
 
@@ -107,7 +134,7 @@ export class Vic {
       if (y < 0 || y >= H) continue;
       const x0 = Math.max(0, (cx - dx) | 0);
       const x1 = Math.min(W, (cx + dx + 1) | 0);
-      this.bmp.fill(c, y * W + x0, y * W + x1);
+      if (x1 > x0) this.bmp.fill(c, y * W + x0, y * W + x1);
     }
   }
 
@@ -116,6 +143,11 @@ export class Vic {
   opset(x, y, c) {
     x |= 0; y |= 0;
     if (x >= 0 && x < W && y >= 0 && y < H) this.ovl[y * W + x] = c;
+  }
+
+  hpset(x, y, c) {
+    x |= 0; y |= 0;
+    if (x >= 0 && x < DISPLAY_W && y >= 0 && y < H) this.hiresOvl[y * DISPLAY_W + x] = c;
   }
 
   orect(x, y, w, h, c) {
@@ -130,28 +162,50 @@ export class Vic {
       const row = grid[j];
       for (let i = 0; i < row.length; i += 1) {
         const ch = row[i];
+        if (typeof ch === 'number') {
+          if (ch !== TRANSPARENT) this.opset(x + i, y + j, ch);
+          continue;
+        }
         if (ch !== '.' && ch !== ' ') this.opset(x + i, y + j, colors[+ch - 1]);
       }
     }
   }
 
-  text(str, x, y, c) {
-    let cx = x;
-    for (const ch of String(str).toUpperCase()) {
-      const glyph = FONT[ch] || FONT['?'];
-      for (let j = 0; j < 6; j += 1) {
-        const bits = glyph[j];
-        for (let i = 0; i < 4; i += 1) {
-          if (bits & (8 >> i)) this.opset(cx + i, y + j, c);
+  // Hires counterpart to sprite(). Grid columns are native display pixels.
+  hsprite(grid, x, y, colors) {
+    for (let j = 0; j < grid.length; j += 1) {
+      const row = grid[j];
+      for (let i = 0; i < row.length; i += 1) {
+        const ch = row[i];
+        if (typeof ch === 'number') {
+          if (ch !== TRANSPARENT) this.hpset(x + i, y + j, ch);
+        } else if (ch !== '.' && ch !== ' ') {
+          this.hpset(x + i, y + j, colors[+ch - 1]);
         }
       }
-      cx += 5;
     }
-    return cx - x;
+  }
+
+  text(str, x, y, c) {
+    // Text positions and widths remain in the 160-wide game coordinate space.
+    // Glyph strokes are single native display pixels for a crisp overlay.
+    let cx = Math.round(x * 2);
+    const value = String(str).toUpperCase();
+    for (const ch of value) {
+      const glyph = FONT[ch] || FONT['?'];
+      for (let j = 0; j < 7; j += 1) {
+        const bits = glyph[j];
+        for (let i = 0; i < 5; i += 1) {
+          if (bits & (16 >> i)) this.hpset(cx + i, y + j, c);
+        }
+      }
+      cx += 6;
+    }
+    return value.length * 3;
   }
 
   textWidth(str) {
-    return String(str).length * 5;
+    return String(str).length * 3;
   }
 
   // Casio-style HUD box drawn on the overlay
@@ -169,50 +223,151 @@ export class Vic {
     if (right) this.text(right, W - this.textWidth(right) - 3, H - 8, C.WHITE);
   }
 
-  // multicolor bitmap rule: per 4x8 cell, background + at most 3 colors
+  setCellPalette(cx, cy, colors = []) {
+    cx |= 0; cy |= 0;
+    if (cx < 0 || cx >= CELL_COLS || cy < 0 || cy >= CELL_ROWS) return;
+    const palette = [];
+    for (const c of colors || []) {
+      const color = c | 0;
+      if (color >= 0 && color < 16 && !palette.includes(color)) {
+        palette.push(color);
+      }
+      if (palette.length === 3) break;
+    }
+    this.cellPalettes[cy * CELL_COLS + cx] = palette;
+  }
+
+  // Set the raster background register for rows without erasing bitmap art.
+  rasterBackground(y0, y1, c) {
+    const a = Math.max(0, y0 | 0);
+    const b = Math.min(H, y1 | 0);
+    if (b <= a) return;
+    for (let y = a; y < b; y += 1) {
+      this.rasterBg[y] = c;
+    }
+  }
+
+  // multicolor bitmap rule: per 4x8 cell, each row's background + at most 3
+  // other colors. The source bitmap is kept intact for redraws and inspection.
   applyCellConstraint() {
+    this.constrained.set(this.bmp);
     const counts = new Uint16Array(16);
-    for (let cy = 0; cy < H; cy += 8) {
-      for (let cx = 0; cx < W; cx += 4) {
+    for (let cy = 0; cy < H; cy += CELL_H) {
+      for (let cx = 0; cx < W; cx += CELL_W) {
         counts.fill(0);
-        for (let y = cy; y < cy + 8; y += 1) {
+        for (let y = cy; y < cy + CELL_H; y += 1) {
+          const rowBg = this.rasterBg[y];
           const base = y * W + cx;
-          counts[this.bmp[base]] += 1;
-          counts[this.bmp[base + 1]] += 1;
-          counts[this.bmp[base + 2]] += 1;
-          counts[this.bmp[base + 3]] += 1;
+          for (let x = 0; x < CELL_W; x += 1) {
+            const p = this.bmp[base + x];
+            if (p !== rowBg) counts[p] += 1;
+          }
         }
-        counts[this.bg] = 0;
-        // pick the 3 most frequent non-background colors
-        let a = -1, b = -1, d = -1;
-        for (let ci = 0; ci < 16; ci += 1) {
-          const n = counts[ci];
-          if (!n) continue;
-          if (a === -1 || n > counts[a]) { d = b; b = a; a = ci; }
-          else if (b === -1 || n > counts[b]) { d = b; b = ci; }
-          else if (d === -1 || n > counts[d]) { d = ci; }
+
+        const explicit = this.cellPalettes[(cy / CELL_H) * CELL_COLS + (cx / CELL_W)];
+        const allowed = explicit ? explicit.slice() : [];
+        if (!explicit) {
+          // Pick the 3 most frequent non-background colors. Ties retain the
+          // lower palette index so frames remain deterministic.
+          while (allowed.length < 3) {
+            let best = -1;
+            for (let ci = 0; ci < 16; ci += 1) {
+              if (!counts[ci] || allowed.includes(ci)) continue;
+              if (best === -1 || counts[ci] > counts[best]) best = ci;
+            }
+            if (best === -1) break;
+            allowed.push(best);
+          }
         }
-        let extra = false;
-        for (let ci = 0; ci < 16; ci += 1) {
-          if (counts[ci] && ci !== a && ci !== b && ci !== d) { extra = true; break; }
-        }
-        if (!extra) continue;
-        for (let y = cy; y < cy + 8; y += 1) {
-          for (let x = cx; x < cx + 4; x += 1) {
+
+        for (let y = cy; y < cy + CELL_H; y += 1) {
+          const rowBg = this.rasterBg[y];
+          for (let x = cx; x < cx + CELL_W; x += 1) {
             const p = this.bmp[y * W + x];
-            if (p === this.bg || p === a || p === b || p === d) continue;
-            // remap to nearest allowed color
-            let best = this.bg;
-            let bd = DIST[p][this.bg];
-            if (a !== -1 && DIST[p][a] < bd) { best = a; bd = DIST[p][a]; }
-            if (b !== -1 && DIST[p][b] < bd) { best = b; bd = DIST[p][b]; }
-            if (d !== -1 && DIST[p][d] < bd) { best = d; }
-            this.bmp[y * W + x] = best;
+            if (p === rowBg || allowed.includes(p)) continue;
+            let best = rowBg;
+            let bd = DIST[p][rowBg];
+            for (const color of allowed) {
+              if (DIST[p][color] < bd) {
+                best = color;
+                bd = DIST[p][color];
+              }
+            }
+            this.constrained[y * W + x] = best;
           }
         }
       }
     }
+    return this.constrained;
   }
+
+  // Compose a native 320x200 RGBA frame. Pass a Uint8Array/Uint8ClampedArray
+  // to reuse storage, or an ImageData-like object with a .data property.
+  compose(targetRGBA) {
+    const target = targetRGBA && targetRGBA.data ? targetRGBA.data :
+      (targetRGBA || new Uint8ClampedArray(DISPLAY_W * H * 4));
+    if (target.length < DISPLAY_W * H * 4) throw new RangeError('RGBA target is too small');
+    const constrained = this.applyCellConstraint();
+    for (let y = 0; y < H; y += 1) {
+      const base = y * W;
+      const hiresBase = y * DISPLAY_W;
+      for (let x = 0; x < W; x += 1) {
+        const over = this.ovl[base + x];
+        const color = over !== TRANSPARENT ? over : constrained[base + x];
+        const rgb = RGB[color] || RGB[C.BLACK];
+        for (let dx = 0; dx < 2; dx += 1) {
+          const p = (hiresBase + x * 2 + dx) * 4;
+          target[p] = rgb[0];
+          target[p + 1] = rgb[1];
+          target[p + 2] = rgb[2];
+          target[p + 3] = 255;
+        }
+      }
+      for (let x = 0; x < DISPLAY_W; x += 1) {
+        const over = this.hiresOvl[hiresBase + x];
+        if (over === TRANSPARENT) continue;
+        const rgb = RGB[over] || RGB[C.BLACK];
+        const p = (hiresBase + x) * 4;
+        target[p] = rgb[0];
+        target[p + 1] = rgb[1];
+        target[p + 2] = rgb[2];
+        target[p + 3] = 255;
+      }
+    }
+    return target;
+  }
+}
+
+// Decode the 63-byte bitmap used by a real 24x21 C64 sprite. In multicolor
+// mode each two-bit value is expanded to two display columns, preserving the
+// native 24-pixel width while retaining the hardware colour meanings.
+export function decodeSprite(bytes, {
+  multicolor = false,
+  color = C.WHITE,
+  sharedColors = [C.BLACK, C.WHITE],
+} = {}) {
+  if (!bytes || bytes.length < 63) throw new RangeError('C64 sprite data must contain 63 bytes');
+  const own = color | 0;
+  const shared0 = (sharedColors && sharedColors[0] !== undefined ? sharedColors[0] : C.BLACK) | 0;
+  const shared1 = (sharedColors && sharedColors[1] !== undefined ? sharedColors[1] : C.WHITE) | 0;
+  const out = [];
+  for (let y = 0; y < 21; y += 1) {
+    const row = [];
+    for (let byte = 0; byte < 3; byte += 1) {
+      const value = bytes[y * 3 + byte] & 0xff;
+      if (!multicolor) {
+        for (let bit = 7; bit >= 0; bit -= 1) row.push(value & (1 << bit) ? own : TRANSPARENT);
+      } else {
+        for (let pair = 3; pair >= 0; pair -= 1) {
+          const code = (value >> (pair * 2)) & 3;
+          const mapped = code === 0 ? TRANSPARENT : code === 1 ? shared0 : code === 2 ? own : shared1;
+          row.push(mapped, mapped);
+        }
+      }
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 // Pre-render rotation frames for a sprite, the way real games shipped
@@ -253,19 +408,38 @@ const PAD_BUTTONS = [
   ['▶', 'ArrowRight'],
 ];
 
-const BORDER_X = 16; // in fat pixels: 32 hires
-const BORDER_Y = 20;
-const CANVAS_W = (W + BORDER_X * 2) * 2; // 384 hires pixels
-const CANVAS_H = H + BORDER_Y * 2; // 240
+const BORDER_X = 4; // in fat pixels: 8 hires
+const BORDER_Y = 6;
+const CANVAS_W = (W + BORDER_X * 2) * 2; // 336 hires pixels
+const SCREEN_H = H * 6 / 5; // 320x200 memory displayed at 4:3 (320x240)
+const CANVAS_H = SCREEN_H + BORDER_Y * 2; // 252, keeping the canvas 4:3
 
 export function runGame(host, createGame) {
   return new Promise((resolve) => {
     const wrap = document.createElement('div');
     wrap.className = 'arcade';
+    const stage = document.createElement('div');
+    stage.className = 'arcade-screen';
     const canvas = document.createElement('canvas');
     canvas.width = CANVAS_W;
     canvas.height = CANVAS_H;
-    wrap.appendChild(canvas);
+    stage.appendChild(canvas);
+    wrap.appendChild(stage);
+
+    const resizeStage = () => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const fit = Math.min(rect.width / CANVAS_W, rect.height / CANVAS_H);
+      // Use the whole available 4:3 area. The canvas still renders from its
+      // low-resolution buffer with smoothing disabled, so fractional display
+      // scaling stays crisp while avoiding a large unused step between 2x
+      // and 3x integer sizes.
+      canvas.style.width = `${CANVAS_W * fit}px`;
+      canvas.style.height = `${CANVAS_H * fit}px`;
+    };
+    const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(resizeStage) : null;
+    if (resizeObserver) resizeObserver.observe(stage);
+    resizeStage();
 
     const pads = document.createElement('div');
     pads.className = 'arcade-pads';
@@ -289,12 +463,13 @@ export function runGame(host, createGame) {
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     const buf = document.createElement('canvas');
-    buf.width = W;
+    buf.width = DISPLAY_W;
     buf.height = H;
     const bufCtx = buf.getContext('2d');
-    const img = bufCtx.createImageData(W, H);
+    const img = bufCtx.createImageData(DISPLAY_W, H);
 
     const vic = new Vic();
+    wrap.style.background = PAL[vic.border];
 
     let done = false;
     let raf = 0;
@@ -305,6 +480,7 @@ export function runGame(host, createGame) {
       cancelAnimationFrame(raf);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      if (resizeObserver) resizeObserver.disconnect();
       wrap.remove();
       resolve(result);
     };
@@ -326,22 +502,19 @@ export function runGame(host, createGame) {
     const api = { keys, end };
     const game = createGame(api);
 
+    // The border colour also fills the letterbox around the canvas, so the
+    // C64 border runs to the edges of the window instead of stopping at black bars.
+    let shownBorder = -1;
     const present = () => {
-      const data = img.data;
-      const { bmp, ovl } = vic;
-      for (let i = 0; i < W * H; i += 1) {
-        const o = ovl[i];
-        const rgb = RGB[o !== 255 ? o : bmp[i]];
-        const p = i * 4;
-        data[p] = rgb[0];
-        data[p + 1] = rgb[1];
-        data[p + 2] = rgb[2];
-        data[p + 3] = 255;
-      }
+      vic.compose(img.data);
       bufCtx.putImageData(img, 0, 0);
+      if (vic.border !== shownBorder) {
+        shownBorder = vic.border;
+        wrap.style.background = PAL[vic.border];
+      }
       ctx.fillStyle = PAL[vic.border];
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-      ctx.drawImage(buf, BORDER_X * 2, BORDER_Y, W * 2, H);
+      ctx.drawImage(buf, BORDER_X * 2, BORDER_Y, DISPLAY_W, SCREEN_H);
     };
 
     // tape-loading raster stripes before the game starts
@@ -372,7 +545,6 @@ export function runGame(host, createGame) {
       } else {
         game.update(dt);
         game.draw(vic);
-        vic.applyCellConstraint();
         present();
       }
       raf = requestAnimationFrame(frame);

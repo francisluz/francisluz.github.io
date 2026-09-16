@@ -564,18 +564,25 @@ body.term-max {
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: #000;
+  background: var(--ink);
   display: flex;
   flex-direction: column;
 }
 
-.arcade canvas {
+.arcade-screen {
   flex: 1;
   min-height: 0;
-  width: 100%;
-  object-fit: contain;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.arcade canvas {
+  display: block;
+  flex: none;
   image-rendering: pixelated;
-  background: #000;
+  background: var(--ink);
 }
 
 .arcade-pads {
@@ -583,7 +590,7 @@ body.term-max {
   gap: 10px;
   justify-content: center;
   padding: 10px;
-  background: #000;
+  background: var(--ink);
 }
 
 @media (pointer: coarse) {

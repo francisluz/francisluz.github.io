@@ -1,47 +1,121 @@
-// Discrete sprite frames for the BMX rider, composed once at init the
-// way C64 artists shipped hand-drawn rotation steps: each pose is
-// rendered into a fat-pixel grid, then pre-rotated in 15° increments.
-// The game only ever blits whole frames — no tweening, no smooth
-// rotation of pixel art.
+// Native hires BMX sprite sheets.
 //
-// Sprite geometry (fat px, rows):
-//   grid is S x S with the mid-point between the two axles at its centre
-//   axles sit AXLE_DX either side of centre, tyres reach WHEEL_R rows
-//   below the axle line, so ground contact = centre row + WHEEL_R.
+// The game still reasons in VIC multicolor pixels (one logical x unit is two
+// screen pixels wide), but these grids are authored at the screen's actual
+// 320-pixel width. Keeping the art native here means the wheel circles,
+// spokes, and thin frame tubes survive the hires sprite blit.
 
-import { C, rotationFrames } from './engine.js';
-import { mk as mkGrid, px, line, ellipse, toStrings } from './pixelArt.js';
+import { C } from './engine.js';
 
-export const S = 56; // sprite grid size
+export const S = 56; // sprite height and logical sprite size
 export const N_ROT = 24; // 15° rotation steps
-export const AXLE_DX = 7; // fat px from centre to each axle
+export const AXLE_DX = 7; // logical pixels from centre to each axle
 export const WHEEL_R = 8; // rows from axle to tyre contact
 
-// 1=blue frame/jersey, 2=black tyre+outline, 3=white kit, 4=red wheel
-// disc, 5=skin. Chosen so the rider reads against the olive desert:
-// black outline, one bright warm mass (the wheels), one cool mass (the
-// rider), white for the helmet that carries the pose.
+// 1=blue frame/jersey, 2=black tyre+outline, 3=white kit, 4=light red skin,
+// 5=burnt orange wheel interior. Keep this palette stable: the caller owns
+// the VIC colour lookup and the sprite layer is exempt from cell colour clash.
 export const COLORS = [C.BLUE, C.BLACK, C.WHITE, C.LIGHTRED, C.ORANGE];
-const B = 1, K = 2, Wt = 3, R = 4, Sk = 5;
+const B = 1, K = 2, Wt = 3, Sk = 4, R = 5;
 
-const CX = S / 2; // 28
-const AXLE_Y = S / 2; // axle line row
+const W = S * 2;
+const CX = S / 2; // logical x = 28, hires x = 56
+const AXLE_Y = S / 2;
+const H = S / 2;
+
 const REAR = [CX - AXLE_DX, AXLE_Y];
 const FRONT = [CX + AXLE_DX, AXLE_Y];
-const BB = [CX, AXLE_Y - 1]; // bottom bracket
+const BB = [CX, AXLE_Y - 1];
 const HAND = [CX + 3, AXLE_Y - 14];
 
-const mk = () => mkGrid(S);
+const blank = () => Array.from({ length: S }, () => new Uint8Array(W));
+const hx = (x) => Math.round(x * 2);
 
-// wheel like the sheet: fat black tyre, bright disc, blue Y-spokes, hub
+// Logical-coordinate wrappers. Lines and ellipses expand their x extent into
+// hires pixels; they do not draw a logical grid and double it later.
+const hpx = (g, x, y, c) => {
+  x = Math.round(x);
+  y = Math.round(y);
+  if (y >= 0 && y < S && x >= 0 && x < W) g[y][x] = c;
+};
+
+const px = (g, x, y, c) => hpx(g, hx(x), y, c);
+
+const line = (g, x0, y0, x1, y1, c, thick = 1) => {
+  const ax = hx(x0);
+  const bx = hx(x1);
+  const ay = Math.round(y0);
+  const by = Math.round(y1);
+  const dx = bx - ax;
+  const dy = by - ay;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1);
+  const horizontal = Math.abs(dx) >= Math.abs(dy);
+  for (let i = 0; i <= steps; i += 1) {
+    const x = ax + (dx * i) / steps;
+    const y = ay + (dy * i) / steps;
+    for (let t = 0; t < thick; t += 1) {
+      if (horizontal) hpx(g, x, y + t, c);
+      else hpx(g, x + t, y, c);
+    }
+  }
+};
+
+const ellipse = (g, cx, cy, rx, ry, c) => {
+  const x0 = hx(cx);
+  const y0 = Math.round(cy);
+  const radiusX = Math.max(1, Math.round(rx * 2));
+  const radiusY = Math.max(1, Math.round(ry));
+  for (let dy = -radiusY; dy <= radiusY; dy += 1) {
+    const span = Math.floor(radiusX * Math.sqrt(Math.max(0, 1 - (dy * dy) / (radiusY * radiusY))) + 0.3);
+    for (let dx = -span; dx <= span; dx += 1) hpx(g, x0 + dx, y0 + dy, c);
+  }
+};
+
+const strings = (g) => g.map((row) => Array.from(row, (v) => (v ? String(v) : '.')).join(''));
+
+// Rotate the finished hires sheet around the visual centre. This samples
+// square pixels directly; engine.rotationFrames() is intentionally not used
+// because it assumes a fat-pixel source grid.
+const rotateFrames = (base) => {
+  const out = [];
+  for (let f = 0; f < N_ROT; f += 1) {
+    const angle = (f / N_ROT) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const rows = [];
+    for (let y = 0; y < S; y += 1) {
+      let row = '';
+      for (let x = 0; x < W; x += 1) {
+        const dx = x - W / 2;
+        const dy = y - H;
+        const sx = Math.round(dx * cos + dy * sin + W / 2);
+        const sy = Math.round(-dx * sin + dy * cos + H);
+        row += sx >= 0 && sx < W && sy >= 0 && sy < S ? base[sy][sx] : '.';
+      }
+      rows.push(row);
+    }
+    out.push(rows);
+  }
+  return out;
+};
+
+// Wheels are deliberately drawn as circles in hires space. The white rim,
+// orange hub area, and dark spokes stay legible at the game's small scale.
 const wheel = (g, cx, cy) => {
   ellipse(g, cx, cy, 4, WHEEL_R, K);
-  ellipse(g, cx, cy, 3, WHEEL_R - 2, R);
-  line(g, cx, cy - 5, cx, cy, B, 1);
-  line(g, cx, cy, cx - 2, cy + 4, B, 1);
-  line(g, cx, cy, cx + 2, cy + 4, B, 1);
+  // A logical four-pixel radius occupied two hires columns per source pixel;
+  // retain that 46-pixel axle-to-axle footprint at the native boundary.
+  hpx(g, hx(cx) + 9, Math.round(cy), K);
+  ellipse(g, cx, cy, 3, 6, Wt);
+  ellipse(g, cx, cy, 2, 4, R);
+  line(g, cx, cy, cx, cy - 3.5, K);
+  line(g, cx, cy, cx, cy + 3.5, K);
+  line(g, cx, cy, cx - 2.2, cy - 3.2, K);
+  line(g, cx, cy, cx + 2.2, cy - 3.2, K);
+  line(g, cx, cy, cx - 2.2, cy + 3.2, K);
+  line(g, cx, cy, cx + 2.2, cy + 3.2, K);
   px(g, cx, cy, K);
-  px(g, cx, cy - 1, K);
+  hpx(g, hx(cx) + 1, Math.round(cy), K);
 };
 
 const bikeFrame = (g) => {
@@ -49,14 +123,17 @@ const bikeFrame = (g) => {
   wheel(g, FRONT[0], FRONT[1]);
   const seat = [CX - 3, AXLE_Y - 9];
   const headTube = [CX + 5, AXLE_Y - 8];
-  line(g, REAR[0], REAR[1], BB[0], BB[1], B, 2); // chainstay
-  line(g, BB[0], BB[1], seat[0], seat[1], B, 2); // seat tube
-  line(g, seat[0], seat[1], headTube[0], headTube[1], B, 2); // top tube
-  line(g, BB[0], BB[1], headTube[0] - 1, headTube[1] + 2, B, 2); // down tube
-  line(g, headTube[0], headTube[1], FRONT[0], FRONT[1], B, 2); // fork
-  line(g, headTube[0], headTube[1], headTube[0], headTube[1] - 5, B, 1); // stem
-  line(g, headTube[0], headTube[1] - 5, HAND[0], HAND[1], B, 1); // bars
-  line(g, seat[0] - 1, seat[1] - 1, seat[0] + 1, seat[1] - 1, K, 2); // seat
+
+  // Slim blue tubes, with a closed rear triangle and a readable fork.
+  line(g, REAR[0], REAR[1], BB[0], BB[1], B);
+  line(g, BB[0], BB[1], seat[0], seat[1], B);
+  line(g, seat[0], seat[1], REAR[0], REAR[1], B);
+  line(g, seat[0], seat[1], headTube[0], headTube[1], B);
+  line(g, BB[0], BB[1], headTube[0] - 1, headTube[1] + 2, B);
+  line(g, headTube[0], headTube[1], FRONT[0], FRONT[1], B);
+  line(g, headTube[0], headTube[1], headTube[0], headTube[1] - 5, B);
+  line(g, headTube[0], headTube[1] - 5, HAND[0], HAND[1], B);
+  line(g, seat[0] - 1.5, seat[1] - 1, seat[0] + 1.5, seat[1] - 1, K, 2);
 };
 
 const cranks = (g, phi) => {
@@ -70,37 +147,50 @@ const cranks = (g, phi) => {
   return [[fx, fy], [bx, by]];
 };
 
-// leg with a forward knee bend, white pants, blue shoe
+// A compact black outline keeps white pants and sleeves separate from the
+// blue frame, especially on the rotated crash frames.
+const limb = (g, a, b, c, width = 3) => {
+  line(g, a[0], a[1], b[0], b[1], K, width + 2);
+  line(g, a[0], a[1], b[0], b[1], c, width);
+};
+
 const leg = (g, hip, foot, shade) => {
-  const kx = (hip[0] + foot[0]) / 2 + 1.5;
-  const ky = (hip[1] + foot[1]) / 2;
-  line(g, hip[0], hip[1], kx, ky, shade, 2);
-  line(g, kx, ky, foot[0], foot[1], shade, 2);
-  px(g, foot[0], foot[1], B);
-  px(g, foot[0] + 1, foot[1], B);
+  const knee = [(hip[0] + foot[0]) / 2 + 1.5, (hip[1] + foot[1]) / 2];
+  const width = shade === Wt ? 4 : 3;
+  limb(g, [hip[0], hip[1]], knee, shade, width);
+  limb(g, knee, foot, shade, width);
+  line(g, foot[0] - 0.8, foot[1], foot[0] + 1.8, foot[1], B, 2);
 };
 
 const rider = (g, pose, feet) => {
   const { hip, sh, head } = pose;
   const hand = pose.hand || HAND;
-  leg(g, [hip[0] - 1, hip[1]], feet[1], B); // back leg, in shadow
-  // torso: a solid blue jersey block with a white stripe down it
-  line(g, hip[0], hip[1], sh[0], sh[1], B, 3);
-  line(g, hip[0] + 1, hip[1] - 1, sh[0] + 1, sh[1] + 1, Wt, 1);
-  line(g, sh[0], sh[1], hand[0], hand[1], Wt, 2); // arm, white sleeve
-  px(g, hand[0], hand[1], Sk); // hand
-  // helmet: white shell with a black brim, skin below it
-  ellipse(g, head[0], head[1], 2, 3, Wt);
-  px(g, head[0] + 2, head[1], K);
-  px(g, head[0] + 1, head[1] + 2, Sk);
-  px(g, head[0] + 2, head[1] + 2, Sk);
-  leg(g, hip, feet[0], Wt); // front leg on top, lit
+
+  // Rear leg first, then the lit front leg on top.
+  leg(g, [hip[0] - 1, hip[1]], feet[1], B);
+
+  // Jersey: outlined blue torso with one white vertical stripe.
+  line(g, hip[0], hip[1], sh[0], sh[1], K, 9);
+  line(g, hip[0], hip[1], sh[0], sh[1], B, 7);
+  line(g, hip[0] + 1.2, hip[1] - 1, sh[0] + 1.2, sh[1] + 1, Wt, 1);
+
+  // White sleeve and salmon hand reaching to the bars.
+  limb(g, sh, hand, Wt, 3);
+  px(g, hand[0], hand[1], Sk);
+  hpx(g, hx(hand[0]) + 1, Math.round(hand[1]), Sk);
+
+  // Helmet, brim, and a small face patch.
+  ellipse(g, head[0], head[1], 2.2, 3, K);
+  ellipse(g, head[0], head[1] - 0.3, 1.8, 2.5, Wt);
+  line(g, head[0] - 0.5, head[1] + 1.5, head[0] + 2.8, head[1] + 1.5, K);
+  px(g, head[0] + 1.6, head[1] + 2.3, Sk);
+  hpx(g, hx(head[0]) + 4, Math.round(head[1] + 2.3), Sk);
+
+  leg(g, hip, feet[0], Wt);
 };
 
-// Upright on the pedals, as in the sheet: rider plus bike measures
-// about 46x36 fat-pixel-doubled pixels, roughly a seventh of the
-// 320-wide screen, which is what makes the desert feel big.
-const RIDE = { hip: [CX - 3, AXLE_Y - 11], sh: [CX + 2, AXLE_Y - 20], head: [CX + 4, AXLE_Y - 24] };
+// Upright on the pedals, with the same logical anchors used by the physics.
+const RIDE = { hip: [CX - 3, AXLE_Y - 11], sh: [CX + 2, AXLE_Y - 20], head: [CX + 2, AXLE_Y - 23] };
 
 const POSE_DEF = {
   coast: { ...RIDE, phi: 0 },
@@ -113,53 +203,42 @@ const POSE_DEF = {
 };
 
 const buildPose = (def) => {
-  const g = mk();
+  const g = blank();
   bikeFrame(g);
   const feet = cranks(g, def.phi);
   rider(g, def, feet);
-  return rotationFrames(toStrings(g), N_ROT, S);
+  return rotateFrames(strings(g));
 };
 
 export const POSES = {};
 for (const [name, def] of Object.entries(POSE_DEF)) POSES[name] = buildPose(def);
 
-// riderless bike, for the crash tumble
 const bikeOnly = () => {
-  const g = mk();
+  const g = blank();
   bikeFrame(g);
   cranks(g, 0.8);
-  return rotationFrames(toStrings(g), N_ROT, S);
+  return rotateFrames(strings(g));
 };
 export const BIKE_ROT = bikeOnly();
 
-// ---- crash frames: the same rider, without the bike under him ----
-//
-// Built from the same routine as the ridden poses so the separated
-// rider stays exactly the scale he was a moment earlier. Feet rest on
-// grid row FOOT_Y, which the game aligns to the ground contact.
-
+// Crash frames use the same rider scale. Feet remain on FOOT_Y so the game
+// can align the separated rider with the ground contact without new physics.
 export const FOOT_Y = AXLE_Y + WHEEL_R;
 
 const buildRiderOnly = (def) => {
-  const g = mk();
+  const g = blank();
   rider(g, def, def.feet);
-  return toStrings(g);
+  return strings(g);
 };
 
-// tumbling ball, pre-rotated so he spins with the bike
-export const TUMBLE_ROT = rotationFrames(
-  buildRiderOnly({
-    hip: [CX - 1, AXLE_Y + 2],
-    sh: [CX + 3, AXLE_Y - 4],
-    head: [CX + 5, AXLE_Y - 7],
-    hand: [CX + 7, AXLE_Y - 1],
-    feet: [[CX - 7, AXLE_Y + 5], [CX - 6, AXLE_Y + 8]],
-  }),
-  N_ROT,
-  S,
-);
+export const TUMBLE_ROT = rotateFrames(buildRiderOnly({
+  hip: [CX - 1, AXLE_Y + 2],
+  sh: [CX + 3, AXLE_Y - 4],
+  head: [CX + 5, AXLE_Y - 7],
+  hand: [CX + 7, AXLE_Y - 1],
+  feet: [[CX - 7, AXLE_Y + 5], [CX - 6, AXLE_Y + 8]],
+}));
 
-// sitting in the dirt, legs out in front
 export const SIT = buildRiderOnly({
   hip: [CX - 3, FOOT_Y - 3],
   sh: [CX - 5, FOOT_Y - 11],
@@ -168,7 +247,6 @@ export const SIT = buildRiderOnly({
   feet: [[CX + 6, FOOT_Y], [CX + 5, FOOT_Y - 1]],
 });
 
-// back on his feet, reaching for the bike
 export const GETUP = buildRiderOnly({
   hip: [CX - 1, FOOT_Y - 9],
   sh: [CX, FOOT_Y - 17],
