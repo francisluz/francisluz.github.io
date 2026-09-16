@@ -1,6 +1,6 @@
-// BMX on the VIC engine: desert track, corduroy dirt, sprite rider
-// built from two overlaid hardware sprites with pre-rendered rotation
-// frames (the chip could not rotate sprites; games shipped frames).
+// BMX on the VIC engine: log-fence dirt track cut into a desert,
+// saguaros, debris, spectators. Sprite rider from two overlaid
+// hardware sprites with pre-rendered rotation frames.
 
 import { W, H, C, rotationFrames } from './engine.js';
 
@@ -9,7 +9,7 @@ const GRAVITY = 240;
 const JUMP_V = -105;
 const FINISH_M = 1000;
 const PX_PER_M = 4;
-const HORIZON = 48;
+const HORIZON = 38;
 
 const groundY = (wx) =>
   H - 46 + Math.sin(wx * 0.036) * 13 + Math.sin(wx * 0.094 + 1.7) * 7;
@@ -19,7 +19,7 @@ const slopeAngle = (wx) => {
   return Math.atan(d / 2); // fat pixels are 2x wide in visual space
 };
 
-// bike sprite: 1=red frame, 2=black tire, 3=grey rim
+// bike: 1=blue frame, 2=black tire, 3=white rim/disc
 const BIKE = [
   '................',
   '................',
@@ -38,14 +38,14 @@ const BIKE = [
   '....1.1111.1....',
   '..222.1..1.222..',
   '.23332.11.23332.',
-  '.23332....23332.',
+  '.23132....23132.',
   '..222......222..',
   '................',
   '................',
   '................',
 ];
 
-// rider sprite: 1=white kit, 2=skin, 3=blue pants
+// rider: 1=white kit+helmet, 2=skin, 3=blue pants
 const RIDER = [
   '................',
   '................',
@@ -71,7 +71,7 @@ const RIDER = [
   '................',
 ];
 
-const BIKE_COLORS = [C.RED, C.BLACK, C.LIGHTGREY];
+const BIKE_COLORS = [C.BLUE, C.BLACK, C.WHITE];
 const RIDER_COLORS = [C.WHITE, C.ORANGE, C.BLUE];
 const N_FRAMES = 16;
 const BIKE_F = rotationFrames(BIKE, N_FRAMES, 26);
@@ -191,57 +191,89 @@ export function createBmx({ keys, end }) {
     }
   };
 
+  // saguaro cactus with two arms
+  const drawCactus = (vic, x, y, h) => {
+    vic.rect(x, y - h, 2, h, C.GREEN);
+    vic.col(x, y - h, y, C.LIGHTGREEN);
+    // left arm: out then up
+    vic.rect(x - 3, y - h + 5, 3, 2, C.GREEN);
+    vic.rect(x - 3, y - h + 2, 1, 4, C.GREEN);
+    vic.pset(x - 3, y - h + 2, C.LIGHTGREEN);
+    // right arm, lower
+    vic.rect(x + 2, y - h + 8, 3, 2, C.GREEN);
+    vic.rect(x + 4, y - h + 5, 1, 4, C.GREEN);
+  };
+
   const draw = (vic) => {
     vic.border = C.BROWN;
     vic.bg = C.ORANGE;
-    vic.clear(C.CYAN);
+    vic.clear(C.LIGHTBLUE);
 
-    // rocky ridge on the horizon
+    // jagged black rock silhouette on the horizon
     for (let x = 0; x < W; x += 1) {
-      const r = 34 - hash(Math.floor((g.wx * 0.2 + x) / 2)) * 7;
-      vic.col(x, r, r + 2, C.BROWN);
-      vic.col(x, r + 2, HORIZON, C.ORANGE);
-      vic.col(x, HORIZON - 2, HORIZON, C.BROWN);
+      const r = 28 - hash(Math.floor((g.wx * 0.15 + x) / 2)) * 6;
+      vic.col(x, r, r + 4, C.BLACK);
+      vic.col(x, r + 4, HORIZON, C.DARKGREY);
     }
 
-    // field + corduroy dirt, column by column
+    // sandy field + log-fence track, column by column
     for (let x = 0; x < W; x += 1) {
       const wxc = g.wx + x;
       const gy = groundY(wxc) | 0;
+      const d = (groundY(wxc + 2) - groundY(wxc - 2)) / 4;
+      const shadowed = d > 0.55; // steep downhill face sits in shadow
+
       vic.col(x, HORIZON, gy - 1, C.YELLOW);
-      vic.pset(x, gy - 1, C.BROWN);
-      const stripe = Math.floor(wxc / 2) % 2 === 0;
-      vic.col(x, gy, H, stripe ? C.ORANGE : C.RED);
+
+      // vertical logs, 2 fat px wide: lit column + shaded column,
+      // dark rounded cap, whole face darker inside gullies
+      const lit = Math.floor(wxc / 2) % 2 === 0;
+      vic.pset(x, gy - 1, shadowed ? C.BLACK : C.BROWN); // cap
+      const body = shadowed ? (lit ? C.BROWN : C.RED) : lit ? C.ORANGE : C.RED;
+      vic.col(x, gy, H, body);
+      // seam between logs every 2nd column
+      if (!lit) {
+        for (let y = gy + ((x & 1) << 1); y < H; y += 4) vic.pset(x, y, C.BROWN);
+      }
     }
 
-    // fallen leaves on the field
-    for (let i = 0; i < 60; i += 1) {
-      const sx = Math.floor(hash(i * 23.7) * W);
-      const sy = HORIZON + Math.floor(hash(i * 51.1) * 70);
-      if (sy < groundY(g.wx + sx) - 3) vic.pset(sx, sy, i % 3 === 0 ? C.RED : C.LIGHTGREEN);
+    // field debris: rocks, orange scrub, dry bushes (world-anchored)
+    const k0 = Math.floor(g.wx / 14) - 1;
+    for (let k = k0; k < k0 + Math.ceil(W / 14) + 2; k += 1) {
+      const sx = Math.floor(k * 14 - g.wx + hash(k) * 10);
+      if (sx < -4 || sx > W + 4) continue;
+      const sy = HORIZON + 4 + Math.floor(hash(k * 3.7) * 100);
+      if (sy > groundY(g.wx + sx) - 8) continue;
+      const kind = hash(k * 9.1);
+      if (kind < 0.4) {
+        vic.rect(sx, sy, 2, 1, C.ORANGE);
+        vic.pset(sx + 2, sy - 1, C.ORANGE);
+      } else if (kind < 0.7) {
+        vic.rect(sx, sy, 2, 1, C.GREY);
+        vic.pset(sx + 1, sy - 1, C.LIGHTGREY);
+      } else {
+        vic.pset(sx, sy, C.BROWN);
+        vic.pset(sx + 1, sy - 1, C.BROWN);
+        vic.pset(sx + 2, sy, C.BROWN);
+      }
     }
 
-    // trees, light parallax
-    const span = W + 40;
-    for (let i = 0; i < 4; i += 1) {
-      const sx = Math.floor(((((i * 130 - g.wx * 0.6) % span) + span) % span) - 20);
-      const ty = 62 + hash(i * 11.3) * 40;
-      vic.rect(sx, ty, 2, 7, C.BROWN);
-      vic.rect(sx - 3, ty - 6, 8, 6, C.GREEN);
-      vic.rect(sx - 1, ty - 9, 4, 4, C.GREEN);
-      vic.rect(sx - 2, ty - 7, 3, 2, C.LIGHTGREEN);
+    // saguaros, light parallax
+    const span = W + 60;
+    for (let i = 0; i < 3; i += 1) {
+      const sx = Math.floor(((((i * 170 - g.wx * 0.7) % span) + span) % span) - 30);
+      const ty = 66 + hash(i * 11.3) * 36;
+      if (ty < groundY(g.wx + sx) - 4) drawCactus(vic, sx, ty, 12 + Math.floor(hash(i * 5.1) * 5));
     }
 
-    // spectators near the track
+    // spectators standing behind the log wall
     const SHIRTS = [C.BLUE, C.RED, C.WHITE];
     for (let i = 0; i < 3; i += 1) {
       const sx = Math.floor(((((i * 210 + 100 - g.wx) % (W + 100)) + (W + 100)) % (W + 100)) - 30);
       if (sx < -6 || sx > W + 6) continue;
       const sy = (groundY(g.wx + sx) | 0) - 1;
-      vic.rect(sx, sy - 4, 1, 4, C.BLACK);
-      vic.rect(sx + 2, sy - 4, 1, 4, C.BLACK);
-      vic.rect(sx - 1, sy - 9, 5, 5, SHIRTS[i % 3]);
-      vic.rect(sx, sy - 12, 3, 3, C.ORANGE);
+      vic.rect(sx - 1, sy - 8, 5, 5, SHIRTS[i % 3]);
+      vic.rect(sx, sy - 11, 3, 3, C.ORANGE);
     }
 
     // obstacles
@@ -277,14 +309,18 @@ export function createBmx({ keys, end }) {
 
     if (g.popup) vic.text(g.popup.text, W / 2 - vic.textWidth(g.popup.text) / 2, 54, C.WHITE);
 
-    // HUD
-    vic.hudBox(`BMX ${Math.min(FINISH_M, Math.round(g.wx / PX_PER_M))}M`, W / 2);
+    // HUD: paired Casio boxes, yellow digits in the bottom bar
+    vic.hudBox('BMX', W / 2 - 22);
+    vic.hudBox(`${Math.min(FINISH_M, Math.round(g.wx / PX_PER_M))}M`, W / 2 + 18);
     for (let i = 0; i < g.lives; i += 1) {
       vic.orect(W - 9 - i * 8, 5, 6, 1, C.RED);
       vic.opset(W - 9 - i * 8, 7, C.BLACK);
       vic.opset(W - 5 - i * 8, 7, C.BLACK);
     }
-    vic.statusBar('UP JUMP · L/R FLIP', `${score()}`);
+    vic.orect(0, H - 10, W, 10, C.BLACK);
+    vic.text(`${Math.round(g.speed)}`, 3, H - 8, C.YELLOW);
+    const sc = `${score()}`;
+    vic.text(sc, W - vic.textWidth(sc) - 3, H - 8, C.YELLOW);
   };
 
   return { update, draw, score };
