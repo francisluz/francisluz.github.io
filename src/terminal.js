@@ -356,6 +356,10 @@ export class Terminal {
 
   async playArcade(which) {
     const factory = which === 'surf' ? createSurf : createBmx;
+    let hi = 0;
+    try {
+      hi = Number(localStorage.getItem(`arcade-hi-${which}`)) || 0;
+    } catch (e) { /* private mode etc. */ }
     await this.stream(
       [
         `LOAD "${which.toUpperCase()}",8,1`,
@@ -363,6 +367,7 @@ export class Terminal {
         which === 'surf'
           ? 'ARROWS RIDE THE WAVE. STAY IN THE POCKET NEAR THE CREST.'
           : 'UP JUMPS. LEFT/RIGHT FLIPS MID-AIR. LAND WITH THE SLOPE.',
+        hi ? `HI SCORE: ${hi}` : 'NO HI SCORE YET. MAKE HISTORY.',
         'ESC RETURNS TO BASIC.',
       ],
       { cps: 600 },
@@ -373,6 +378,12 @@ export class Terminal {
     this.busy = false;
     this.screen.innerHTML = '';
     const score = Math.round(res.score ?? 0);
+    const newHi = score > hi;
+    if (newHi) {
+      try {
+        localStorage.setItem(`arcade-hi-${which}`, String(score));
+      } catch (e) { /* ignore */ }
+    }
     let lines;
     if (which === 'surf') {
       const rank =
@@ -384,6 +395,7 @@ export class Terminal {
         res.quit ? 'YOU PADDLE IN EARLY.' : res.wiped ? 'ALL BOARDS SNAPPED. THE OCEAN WINS TODAY.' : 'SESSION OVER. ARMS LIKE NOODLES.',
         '',
         `FINAL SCORE: ${score}`,
+        newHi ? '*** NEW HI SCORE ***' : `HI SCORE: ${Math.max(hi, score)}`,
         rank,
         '',
         'TYPE SURF TO PADDLE BACK OUT.',
@@ -401,6 +413,7 @@ export class Terminal {
         : 'THIRD CRASH. THE BIKE IS A MODERN ART PIECE NOW.',
         '',
         `FINAL SCORE: ${score}`,
+        newHi ? '*** NEW HI SCORE ***' : `HI SCORE: ${Math.max(hi, score)}`,
         rank,
         '',
         'TYPE BMX TO RIDE AGAIN.',

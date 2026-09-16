@@ -1,38 +1,91 @@
-// BMX — side-scrolling dirt track. Jump the rocks and tumbleweeds,
-// rotate in the air for flip points, land close to the slope. 3 bikes.
-// Look modeled on late-80s EGA BMX games: warm desert palette, rocky
-// ridge horizon, corduroy dirt, trees and spectators along the track.
+// BMX on the VIC engine: desert track, corduroy dirt, sprite rider
+// built from two overlaid hardware sprites with pre-rendered rotation
+// frames (the chip could not rotate sprites; games shipped frames).
 
-import { W, H, C64, hudText, hudBox, statusBar, hash } from './engine.js';
+import { W, H, C, rotationFrames } from './engine.js';
 
-const SKY = '#4fc8dc';
-const RIDGE = '#6b4a1c';
-const RIDGE_DARK = '#3f2a0e';
-const FIELD = '#cdb944';
-const FIELD_LIGHT = '#dccd66';
-const DIRT = '#c14a1a';
-const DIRT_DARK = '#8f3110';
-const DIRT_LINE = '#5e1f08';
-
-const PX = 70;
+const PX = 35;
 const GRAVITY = 240;
 const JUMP_V = -105;
 const FINISH_M = 1000;
-const PX_PER_M = 8;
-const HORIZON = 40;
+const PX_PER_M = 4;
+const HORIZON = 48;
 
 const groundY = (wx) =>
-  H - 46 + Math.sin(wx * 0.018) * 13 + Math.sin(wx * 0.047 + 1.7) * 7;
+  H - 46 + Math.sin(wx * 0.036) * 13 + Math.sin(wx * 0.094 + 1.7) * 7;
 
 const slopeAngle = (wx) => {
-  const d = (groundY(wx + 4) - groundY(wx - 4)) / 8;
-  return Math.atan(d);
+  const d = (groundY(wx + 2) - groundY(wx - 2)) / 4;
+  return Math.atan(d / 2); // fat pixels are 2x wide in visual space
+};
+
+// bike sprite: 1=red frame, 2=black tire, 3=grey rim
+const BIKE = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '....11.....1....',
+  '....111111111...',
+  '....1.1111.1....',
+  '..222.1..1.222..',
+  '.23332.11.23332.',
+  '.23332....23332.',
+  '..222......222..',
+  '................',
+  '................',
+  '................',
+];
+
+// rider sprite: 1=white kit, 2=skin, 3=blue pants
+const RIDER = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '......111.......',
+  '......111.......',
+  '......22........',
+  '.....1111.......',
+  '.....11111......',
+  '.....111.22.....',
+  '.....333........',
+  '.....333........',
+  '....33.33.......',
+  '....3...3.......',
+  '....2...2.......',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+];
+
+const BIKE_COLORS = [C.RED, C.BLACK, C.LIGHTGREY];
+const RIDER_COLORS = [C.WHITE, C.ORANGE, C.BLUE];
+const N_FRAMES = 16;
+const BIKE_F = rotationFrames(BIKE, N_FRAMES, 26);
+const RIDER_F = rotationFrames(RIDER, N_FRAMES, 26);
+
+const hash = (n) => {
+  const s = Math.sin(n * 127.1) * 43758.5453;
+  return s - Math.floor(s);
 };
 
 export function createBmx({ keys, end }) {
   const g = {
     wx: 0,
-    speed: 78,
+    speed: 39,
     py: groundY(PX),
     vy: 0,
     air: false,
@@ -43,9 +96,8 @@ export function createBmx({ keys, end }) {
     crashT: 0,
     popup: null,
     obstacles: [],
-    nextObs: 260,
+    nextObs: 130,
     jumpHeld: false,
-    pedal: 0,
   };
 
   const score = () => Math.round((g.wx / PX_PER_M) * 2 + g.tricks);
@@ -57,7 +109,7 @@ export function createBmx({ keys, end }) {
     g.air = false;
     g.ang = 0;
     g.spin = 0;
-    g.speed = 78;
+    g.speed = 39;
     if (g.lives <= 0) {
       setTimeout(() => end({ score: score(), dist: Math.round(g.wx / PX_PER_M), wiped: true }), 900);
     }
@@ -70,9 +122,8 @@ export function createBmx({ keys, end }) {
       return;
     }
 
-    g.speed = Math.min(126, g.speed + 3.5 * dt);
+    g.speed = Math.min(63, g.speed + 1.75 * dt);
     g.wx += g.speed * dt;
-    g.pedal += g.speed * dt * 0.15;
 
     const dist = g.wx / PX_PER_M;
     if (dist >= FINISH_M) {
@@ -81,15 +132,10 @@ export function createBmx({ keys, end }) {
     }
 
     if (g.wx + W > g.nextObs) {
-      g.obstacles.push({
-        x: g.nextObs + W,
-        w: 9,
-        h: 7,
-        weed: hash(g.nextObs) > 0.5,
-      });
-      g.nextObs += 150 + Math.random() * 220;
+      g.obstacles.push({ x: g.nextObs + W, w: 5, h: 7, weed: hash(g.nextObs) > 0.5 });
+      g.nextObs += 75 + Math.random() * 110;
     }
-    g.obstacles = g.obstacles.filter((o) => o.x > g.wx - 40);
+    g.obstacles = g.obstacles.filter((o) => o.x > g.wx - 20);
 
     const wpx = g.wx + PX;
     const gy = groundY(wpx);
@@ -100,7 +146,7 @@ export function createBmx({ keys, end }) {
       const jump = keys.has('ArrowUp') || keys.has(' ');
       if (jump && !g.jumpHeld) {
         g.air = true;
-        g.vy = JUMP_V - g.speed * 0.12;
+        g.vy = JUMP_V - g.speed * 0.24;
         g.spin = 0;
       }
       g.jumpHeld = jump;
@@ -137,7 +183,7 @@ export function createBmx({ keys, end }) {
         if (flips > 0) {
           const pts = flips * 250;
           g.tricks += pts;
-          g.popup = { text: `${g.spin < 0 ? 'BACK' : 'FRONT'}FLIP X${flips}! +${pts}`, ttl: 1.6 };
+          g.popup = { text: `${g.spin < 0 ? 'BACK' : 'FRONT'}FLIP X${flips} +${pts}`, ttl: 1.6 };
         }
         g.ang = target;
         g.spin = 0;
@@ -145,184 +191,100 @@ export function createBmx({ keys, end }) {
     }
   };
 
-  // bigger rider: red bike, spoked wheels, white-and-blue kit + helmet
-  const drawBike = (ctx) => {
-    ctx.save();
-    ctx.translate(PX, g.py - 9);
-    ctx.rotate(g.crashT > 0 ? g.crashT * 10 : g.ang);
+  const draw = (vic) => {
+    vic.border = C.BROWN;
+    vic.bg = C.ORANGE;
+    vic.clear(C.CYAN);
 
-    const wheel = (wx) => {
-      ctx.fillStyle = C64.black;
-      ctx.beginPath();
-      ctx.arc(wx, 7, 5.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = C64.lightgrey;
-      ctx.beginPath();
-      ctx.arc(wx, 7, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = C64.darkgrey;
-      ctx.lineWidth = 1;
-      const a = g.pedal;
-      ctx.beginPath();
-      ctx.moveTo(wx - Math.cos(a) * 3.5, 7 - Math.sin(a) * 3.5);
-      ctx.lineTo(wx + Math.cos(a) * 3.5, 7 + Math.sin(a) * 3.5);
-      ctx.moveTo(wx - Math.sin(a) * 3.5, 7 + Math.cos(a) * 3.5);
-      ctx.lineTo(wx + Math.sin(a) * 3.5, 7 - Math.cos(a) * 3.5);
-      ctx.stroke();
-      ctx.fillStyle = C64.black;
-      ctx.beginPath();
-      ctx.arc(wx, 7, 1.5, 0, Math.PI * 2);
-      ctx.fill();
-    };
-    wheel(-9);
-    wheel(9);
-
-    // red frame
-    ctx.strokeStyle = '#d43d1a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-9, 7);
-    ctx.lineTo(-1, 1);
-    ctx.lineTo(9, 7);
-    ctx.moveTo(-1, 1);
-    ctx.lineTo(2, 6);
-    ctx.moveTo(9, 7);
-    ctx.lineTo(8, -1);
-    ctx.stroke();
-
-    // rider: blue legs, white jersey with blue sleeve, helmet
-    ctx.fillStyle = '#2929c7';
-    ctx.fillRect(-2, -2, 3, 7);
-    ctx.fillRect(2, -3, 3, 7);
-    ctx.fillStyle = C64.white;
-    ctx.fillRect(-2, -10, 7, 8);
-    ctx.fillStyle = '#2929c7';
-    ctx.fillRect(3, -9, 5, 3);
-    ctx.fillStyle = C64.orange;
-    ctx.fillRect(6, -7, 3, 2);
-    ctx.fillRect(0, -14, 4, 4);
-    ctx.fillStyle = C64.white;
-    ctx.fillRect(-1, -16, 6, 3);
-    ctx.restore();
-  };
-
-  const drawScenery = (ctx) => {
-    // trees on the field, scrolling at 0.6x for light parallax
-    const span = W + 80;
-    for (let i = 0; i < 4; i += 1) {
-      const sx = ((((i * 260 - g.wx * 0.6) % span) + span) % span) - 40;
-      const ty = HORIZON + 22 + hash(i * 11.3) * 30;
-      ctx.fillStyle = '#7a4a1c';
-      ctx.fillRect(sx, ty, 3, 9);
-      ctx.fillStyle = C64.green;
-      ctx.fillRect(sx - 5, ty - 8, 13, 8);
-      ctx.fillRect(sx - 2, ty - 12, 7, 5);
-      ctx.fillStyle = C64.lightgreen;
-      ctx.fillRect(sx - 3, ty - 10, 4, 3);
-    }
-
-    // spectators standing near the track
-    const SHIRTS = ['#2929c7', '#d43d1a', C64.white];
-    for (let i = 0; i < 3; i += 1) {
-      const sx = ((i * 420 + 200 - g.wx) % (W + 200) + (W + 200)) % (W + 200) - 60;
-      if (sx < -10 || sx > W + 10) continue;
-      const wxAt = g.wx + sx;
-      const sy = groundY(wxAt) - 1;
-      if (sy < HORIZON + 20) continue;
-      ctx.fillStyle = C64.black;
-      ctx.fillRect(sx, sy - 4, 2, 4);
-      ctx.fillRect(sx + 3, sy - 4, 2, 4);
-      ctx.fillStyle = SHIRTS[i % 3];
-      ctx.fillRect(sx - 1, sy - 10, 7, 6);
-      ctx.fillStyle = C64.orange;
-      ctx.fillRect(sx + 1, sy - 14, 4, 4);
-    }
-  };
-
-  const draw = (ctx) => {
-    // sky strip + rocky ridge on the horizon
-    ctx.fillStyle = SKY;
-    ctx.fillRect(0, 0, W, HORIZON);
+    // rocky ridge on the horizon
     for (let x = 0; x < W; x += 1) {
-      const r = HORIZON - 8 - hash(Math.floor((g.wx * 0.2 + x) / 3)) * 7;
-      ctx.fillStyle = RIDGE_DARK;
-      ctx.fillRect(x, r, 1, HORIZON - r);
-      ctx.fillStyle = RIDGE;
-      ctx.fillRect(x, r + 2, 1, HORIZON - r - 2);
+      const r = 34 - hash(Math.floor((g.wx * 0.2 + x) / 2)) * 7;
+      vic.col(x, r, r + 2, C.BROWN);
+      vic.col(x, r + 2, HORIZON, C.ORANGE);
+      vic.col(x, HORIZON - 2, HORIZON, C.BROWN);
     }
 
-    // field + dirt track, column by column
+    // field + corduroy dirt, column by column
     for (let x = 0; x < W; x += 1) {
       const wxc = g.wx + x;
-      const gy = groundY(wxc);
-      ctx.fillStyle = FIELD;
-      ctx.fillRect(x, HORIZON, 1, gy - HORIZON);
-      // corduroy dirt: alternating vertical stripes, like cut cliff faces
-      const stripe = Math.floor(wxc / 4) % 2 === 0;
-      ctx.fillStyle = DIRT_LINE;
-      ctx.fillRect(x, gy - 2, 1, 2);
-      ctx.fillStyle = stripe ? DIRT : DIRT_DARK;
-      ctx.fillRect(x, gy, 1, H - gy);
+      const gy = groundY(wxc) | 0;
+      vic.col(x, HORIZON, gy - 1, C.YELLOW);
+      vic.pset(x, gy - 1, C.BROWN);
+      const stripe = Math.floor(wxc / 2) % 2 === 0;
+      vic.col(x, gy, H, stripe ? C.ORANGE : C.RED);
     }
 
-    // field speckles: fallen leaves
-    for (let i = 0; i < 90; i += 1) {
+    // fallen leaves on the field
+    for (let i = 0; i < 60; i += 1) {
       const sx = Math.floor(hash(i * 23.7) * W);
-      const sy = HORIZON + Math.floor(hash(i * 51.1) * 60);
-      if (sy < groundY(g.wx + sx) - 4) {
-        ctx.fillStyle = i % 3 === 0 ? '#d43d1a' : FIELD_LIGHT;
-        ctx.fillRect(sx, sy, 2, 1);
-      }
+      const sy = HORIZON + Math.floor(hash(i * 51.1) * 70);
+      if (sy < groundY(g.wx + sx) - 3) vic.pset(sx, sy, i % 3 === 0 ? C.RED : C.LIGHTGREEN);
     }
 
-    drawScenery(ctx);
+    // trees, light parallax
+    const span = W + 40;
+    for (let i = 0; i < 4; i += 1) {
+      const sx = Math.floor(((((i * 130 - g.wx * 0.6) % span) + span) % span) - 20);
+      const ty = 62 + hash(i * 11.3) * 40;
+      vic.rect(sx, ty, 2, 7, C.BROWN);
+      vic.rect(sx - 3, ty - 6, 8, 6, C.GREEN);
+      vic.rect(sx - 1, ty - 9, 4, 4, C.GREEN);
+      vic.rect(sx - 2, ty - 7, 3, 2, C.LIGHTGREEN);
+    }
 
-    // obstacles: tumbleweeds and rocks
+    // spectators near the track
+    const SHIRTS = [C.BLUE, C.RED, C.WHITE];
+    for (let i = 0; i < 3; i += 1) {
+      const sx = Math.floor(((((i * 210 + 100 - g.wx) % (W + 100)) + (W + 100)) % (W + 100)) - 30);
+      if (sx < -6 || sx > W + 6) continue;
+      const sy = (groundY(g.wx + sx) | 0) - 1;
+      vic.rect(sx, sy - 4, 1, 4, C.BLACK);
+      vic.rect(sx + 2, sy - 4, 1, 4, C.BLACK);
+      vic.rect(sx - 1, sy - 9, 5, 5, SHIRTS[i % 3]);
+      vic.rect(sx, sy - 12, 3, 3, C.ORANGE);
+    }
+
+    // obstacles
     for (const o of g.obstacles) {
       const sx = o.x - g.wx;
-      if (sx < -20 || sx > W + 20) continue;
+      if (sx < -10 || sx > W + 10) continue;
       const gy = groundY(o.x);
       if (o.weed) {
-        ctx.fillStyle = C64.green;
-        ctx.beginPath();
-        ctx.arc(sx, gy - 4, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = C64.lightgreen;
-        for (let i = 0; i < 8; i += 1) {
-          ctx.fillRect(sx - 4 + hash(i * 3.3 + o.x) * 8, gy - 8 + hash(i * 7.7) * 8, 1, 1);
-        }
+        vic.circle(sx, gy - 3, 3, C.GREEN);
+        vic.pset(sx - 1, gy - 5, C.LIGHTGREEN);
+        vic.pset(sx + 1, gy - 3, C.LIGHTGREEN);
       } else {
-        ctx.fillStyle = C64.darkgrey;
-        ctx.fillRect(sx - o.w / 2, gy - o.h, o.w, o.h);
-        ctx.fillStyle = C64.lightgrey;
-        ctx.fillRect(sx - o.w / 2 + 1, gy - o.h + 1, 3, 2);
+        vic.rect(sx - 2, gy - o.h, o.w, o.h, C.DARKGREY);
+        vic.rect(sx - 1, gy - o.h + 1, 2, 2, C.LIGHTGREY);
       }
     }
 
     // finish flag
     const fx = FINISH_M * PX_PER_M - g.wx + PX;
-    if (fx < W + 20) {
+    if (fx < W + 10) {
       const gy = groundY(FINISH_M * PX_PER_M + PX);
-      ctx.fillStyle = C64.white;
-      ctx.fillRect(fx, gy - 34, 2, 34);
-      ctx.fillStyle = '#d43d1a';
-      ctx.fillRect(fx + 2, gy - 34, 12, 8);
+      vic.rect(fx, gy - 30, 1, 30, C.WHITE);
+      vic.rect(fx + 1, gy - 30, 7, 6, C.RED);
     }
 
-    drawBike(ctx);
+    // rider: two overlaid sprites, stepped rotation frames
+    const ang = g.crashT > 0 ? g.crashT * 10 : g.ang;
+    const fi = ((Math.round((ang / (Math.PI * 2)) * N_FRAMES) % N_FRAMES) + N_FRAMES) % N_FRAMES;
+    const sx = PX - 13;
+    const sy = g.py - 20;
+    vic.sprite(BIKE_F[fi], sx, sy, BIKE_COLORS);
+    vic.sprite(RIDER_F[fi], sx, sy, RIDER_COLORS);
 
-    if (g.popup) hudText(ctx, g.popup.text, W / 2 - 54, 50, C64.white);
+    if (g.popup) vic.text(g.popup.text, W / 2 - vic.textWidth(g.popup.text) / 2, 54, C.WHITE);
 
-    // HUD, reference style
-    hudBox(ctx, `BMX ${Math.min(FINISH_M, Math.round(g.wx / PX_PER_M))}M`, W / 2);
+    // HUD
+    vic.hudBox(`BMX ${Math.min(FINISH_M, Math.round(g.wx / PX_PER_M))}M`, W / 2);
     for (let i = 0; i < g.lives; i += 1) {
-      ctx.fillStyle = '#d43d1a';
-      ctx.fillRect(W - 20 - i * 14, 8, 10, 2);
-      ctx.fillStyle = C64.black;
-      ctx.fillRect(W - 20 - i * 14, 10, 3, 3);
-      ctx.fillRect(W - 13 - i * 14, 10, 3, 3);
+      vic.orect(W - 9 - i * 8, 5, 6, 1, C.RED);
+      vic.opset(W - 9 - i * 8, 7, C.BLACK);
+      vic.opset(W - 5 - i * 8, 7, C.BLACK);
     }
-    statusBar(ctx, 'UP JUMPS · L/R FLIPS · ESC QUITS', `${score()}`);
+    vic.statusBar('UP JUMP · L/R FLIP', `${score()}`);
   };
 
   return { update, draw, score };
