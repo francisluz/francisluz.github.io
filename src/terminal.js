@@ -366,7 +366,7 @@ export class Terminal {
         'SEARCHING... FOUND. ENTERING GRAPHICS MODE.',
         which === 'surf'
           ? 'ARROWS RIDE THE WAVE. STAY IN THE POCKET NEAR THE CREST.'
-          : 'UP JUMPS. LEFT/RIGHT FLIPS MID-AIR. LAND WITH THE SLOPE.',
+          : 'RIGHT PEDALS. UP JUMPS. DOWN WHEELIES. AIR: LEFT/RIGHT FLIPS. LAND WITH THE SLOPE.',
         hi ? `HI SCORE: ${hi}` : 'NO HI SCORE YET. MAKE HISTORY.',
         'ESC RETURNS TO BASIC.',
       ],
@@ -410,6 +410,7 @@ export class Terminal {
       lines = [
         res.quit ? 'YOU WALK THE BIKE HOME.'
         : res.finished ? `FINISH LINE! ${res.dist}M OF DIRT CONQUERED.`
+        : res.timeup ? 'THE CASIO SAYS TIME. THE SPONSORS HAVE GONE HOME.'
         : 'THIRD CRASH. THE BIKE IS A MODERN ART PIECE NOW.',
         '',
         `FINAL SCORE: ${score}`,

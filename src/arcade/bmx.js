@@ -1,205 +1,351 @@
-// BMX on the VIC engine: log-fence dirt track cut into a desert,
-// saguaros, debris, spectators. Sprite rider from two overlaid
-// hardware sprites with pre-rendered rotation frames.
+// BMX on the VIC engine, rebuilt after the California Games C64 event.
+//
+// - the course is hand-authored modular segments (bmxTrack.js); physics
+//   reads the invisible heightfield, never the drawn pixels
+// - the bike rides on two wheel contacts; the ground angle comes from
+//   rear/front contact heights, so the wheels visibly follow slopes
+// - the rider is discrete sprite frames with pre-rendered 15° rotation
+//   steps (bmxSprites.js); nothing is tweened
+// - the track face below the riding surface is drawn from the terrain
+//   height: burnt orange with repeated dark vertical stripes
+//
+// Controls: RIGHT pedals, LEFT brakes, UP jumps, DOWN wheelies.
+// Airborne: LEFT/RIGHT rotate. Land with both wheels on the slope.
 
-import { W, H, C, rotationFrames } from './engine.js';
+import { W, H, C } from './engine.js';
+import {
+  S, N_ROT, AXLE_DX, WHEEL_R, FOOT_Y, COLORS, POSES, BIKE_ROT,
+  TUMBLE_ROT, SIT, GETUP,
+} from './bmxSprites.js';
+import {
+  BASE, CANYON_FLOOR, FINISH_X, groundRow, holeAt, solidAfter, canyonTopRow,
+} from './bmxTrack.js';
 
-const PX = 35;
-const GRAVITY = 240;
-const JUMP_V = -105;
-const FINISH_M = 1000;
+const PXS = 48; // player screen x (30% of 160)
+const WHEELBASE = AXLE_DX * 2; // fat px between axles
+const GRAVITY = 300;
+const MAX_SPEED = 82;
 const PX_PER_M = 4;
-const HORIZON = 38;
-
-const groundY = (wx) =>
-  H - 46 + Math.sin(wx * 0.036) * 13 + Math.sin(wx * 0.094 + 1.7) * 7;
-
-const slopeAngle = (wx) => {
-  const d = (groundY(wx + 2) - groundY(wx - 2)) / 4;
-  return Math.atan(d / 2); // fat pixels are 2x wide in visual space
-};
-
-// bike: 1=blue frame, 2=black tire, 3=white rim/disc
-const BIKE = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '....11.....1....',
-  '....111111111...',
-  '....1.1111.1....',
-  '..222.1..1.222..',
-  '.23332.11.23332.',
-  '.23132....23132.',
-  '..222......222..',
-  '................',
-  '................',
-  '................',
-];
-
-// rider: 1=white kit+helmet, 2=skin, 3=blue pants
-const RIDER = [
-  '................',
-  '................',
-  '................',
-  '................',
-  '......111.......',
-  '......111.......',
-  '......22........',
-  '.....1111.......',
-  '.....11111......',
-  '.....111.22.....',
-  '.....333........',
-  '.....333........',
-  '....33.33.......',
-  '....3...3.......',
-  '....2...2.......',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-  '................',
-];
-
-const BIKE_COLORS = [C.BLUE, C.BLACK, C.WHITE];
-const RIDER_COLORS = [C.WHITE, C.ORANGE, C.BLUE];
-const N_FRAMES = 16;
-const BIKE_F = rotationFrames(BIKE, N_FRAMES, 26);
-const RIDER_F = rotationFrames(RIDER, N_FRAMES, 26);
+const TIME_LIMIT = 150; // the Casio is unforgiving
+const TAU = Math.PI * 2;
 
 const hash = (n) => {
   const s = Math.sin(n * 127.1) * 43758.5453;
   return s - Math.floor(s);
 };
 
+const norm = (a) => {
+  let d = a % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return d;
+};
+
+const frameOf = (ang) => ((Math.round((ang / TAU) * N_ROT) % N_ROT) + N_ROT) % N_ROT;
+
 export function createBmx({ keys, end }) {
   const g = {
-    wx: 0,
-    speed: 39,
-    py: groundY(PX),
+    wx: 8, // rear wheel contact x
+    speed: 0,
+    my: BASE - WHEEL_R, // axle-midpoint row
     vy: 0,
-    air: false,
+    gv: 0, // vertical rate while grounded (rows/s)
     ang: 0,
     spin: 0,
+    air: false,
+    started: false,
+    t: 0,
     lives: 3,
     tricks: 0,
-    crashT: 0,
+    wheelieAcc: 0,
+    compress: 0,
+    pedalPh: 0,
+    camY: 0,
     popup: null,
-    obstacles: [],
-    nextObs: 130,
+    crash: null,
+    dust: [],
     jumpHeld: false,
+    lockL: false,
+    lockR: false,
+    airT: 0,
+    over: false,
   };
 
-  const score = () => Math.round((g.wx / PX_PER_M) * 2 + g.tricks);
+  const say = (text, ttl = 1.8) => { g.popup = { text, ttl }; };
+  say('HOLD RIGHT TO PEDAL', 3);
 
-  const crash = (reason) => {
-    g.lives -= 1;
-    g.crashT = 1.4;
-    g.popup = { text: reason, ttl: 1.8 };
+  const distM = () => Math.round(Math.min(g.wx, FINISH_X) / PX_PER_M);
+  const score = () => Math.round(distM() * 2 + g.tricks);
+
+  const puffDust = (x, y, n) => {
+    for (let i = 0; i < n; i += 1) {
+      g.dust.push({
+        x: x + (Math.random() - 0.5) * 4,
+        y: y - Math.random() * 2,
+        vx: -20 - Math.random() * 20,
+        vy: -14 - Math.random() * 22,
+        ttl: 0.4 + Math.random() * 0.4,
+      });
+    }
+  };
+
+  const startCrash = (reason) => {
+    say(reason, 2.2);
+    g.crash = {
+      t: 0,
+      rx: g.wx + AXLE_DX, ry: g.my + WHEEL_R, rvx: g.speed * 0.55, rvy: Math.min(g.vy, 0) - 50,
+      bx: g.wx + AXLE_DX, by: g.my, bvx: g.speed * 1.5 + 14, bvy: Math.min(g.vy, 0) - 70,
+      bspin: 0, brest: false,
+    };
+    puffDust(g.wx + AXLE_DX, g.my + WHEEL_R, 6);
     g.air = false;
-    g.ang = 0;
     g.spin = 0;
-    g.speed = 39;
-    if (g.lives <= 0) {
-      setTimeout(() => end({ score: score(), dist: Math.round(g.wx / PX_PER_M), wiped: true }), 900);
+    g.wheelieAcc = 0;
+  };
+
+  const finish = (flags) => {
+    if (g.over) return;
+    g.over = true;
+    end({ score: score(), dist: distM(), ...flags });
+  };
+
+  const bankWheelie = () => {
+    if (g.wheelieAcc >= 10) {
+      const pts = Math.round(g.wheelieAcc);
+      g.tricks += pts;
+      say(`WHEELIE +${pts}`, 1.3);
+    }
+    g.wheelieAcc = 0;
+  };
+
+  // rotated axle offsets while airborne (visual-space rotation, fat x)
+  const contacts = () => {
+    const cos = Math.cos(g.ang);
+    const sin = Math.sin(g.ang);
+    const rcx = g.wx + AXLE_DX - AXLE_DX * cos;
+    const fcx = g.wx + AXLE_DX + AXLE_DX * cos;
+    const rcy = g.my - WHEELBASE * sin + WHEEL_R;
+    const fcy = g.my + WHEELBASE * sin + WHEEL_R;
+    return { rcx, rcy, fcx, fcy };
+  };
+
+  // Ground reference under a pair of wheel contacts. A wheel hanging
+  // over a gap must not read the canyon floor as terrain, so the slope
+  // is taken from the solid side and extrapolated across the edge.
+  // Returns null when nothing solid is under the bike at all.
+  const groundRef = (rcx, fcx) => {
+    const rHole = holeAt(rcx);
+    const fHole = holeAt(fcx);
+    if (rHole && fHole) return null;
+    let sR = rcx;
+    let sF = fcx;
+    if (fHole) { sR = rcx - WHEELBASE; sF = rcx; }
+    else if (rHole) { sR = fcx; sF = fcx + WHEELBASE; }
+    const gyR = groundRow(rHole ? fcx : rcx);
+    const gyF = gyR + (groundRow(sF) - groundRow(sR));
+    return { gyR, gyF, ang: Math.atan2(gyF - gyR, WHEELBASE * 2) };
+  };
+
+  const land = ({ rcx, fcx }) => {
+    const ref = groundRef(rcx, fcx);
+    if (!ref) {
+      startCrash('INTO THE CANYON!');
+      return;
+    }
+    // a wheel can reach solid ground while the bike itself has already
+    // sunk past that surface: that is a vertical face, not a landing
+    if (g.my + WHEEL_R - Math.min(ref.gyR, ref.gyF) > 10) {
+      startCrash('EAT DIRT!');
+      return;
+    }
+    const { gyR, gyF } = ref;
+    const target = ref.ang;
+    const diff = norm(g.ang - target);
+    if (Math.abs(diff) > 0.95 || g.vy > 330) {
+      startCrash(diff > 0.4 ? 'OVER THE BARS!' : 'CASED IT!');
+      return;
+    }
+    const flips = Math.floor(Math.abs(g.spin) / TAU);
+    if (flips > 0) {
+      const pts = flips * 250;
+      g.tricks += pts;
+      say(`${g.spin < 0 ? 'BACK' : 'FRONT'}FLIP X${flips} +${pts}`, 1.6);
+    }
+    if (Math.abs(diff) > 0.55 || g.vy > 240) {
+      g.speed *= 0.55;
+      g.compress = 0.35;
+      puffDust(rcx, gyR, 5);
+    } else {
+      g.compress = 0.18;
+      puffDust(rcx, gyR, 2);
+    }
+    g.air = false;
+    g.wx = rcx;
+    g.ang = target;
+    g.spin = 0;
+    g.vy = 0;
+    g.my = (gyR + gyF) / 2 - WHEEL_R;
+    g.gv = 0;
+  };
+
+  const updateCrash = (dt) => {
+    const c = g.crash;
+    c.t += dt;
+    // rider ragdoll
+    c.rvy += GRAVITY * dt;
+    c.rx += c.rvx * dt;
+    c.ry += c.rvy * dt;
+    const rg = holeAt(c.rx) ? CANYON_FLOOR : groundRow(c.rx);
+    if (c.ry > rg) {
+      c.ry = rg;
+      c.rvy = 0;
+      c.rvx *= 1 - 4 * dt;
+      if (c.rvx > 14 && Math.random() < 0.5) puffDust(c.rx, rg, 1);
+    }
+    // bike tumbles further
+    c.bvy += GRAVITY * dt;
+    c.bx += c.bvx * dt;
+    c.by += c.bvy * dt;
+    if (!c.brest) c.bspin += 9 * dt;
+    const bg = holeAt(c.bx) ? CANYON_FLOOR : groundRow(c.bx);
+    if (c.by > bg - WHEEL_R) {
+      c.by = bg - WHEEL_R;
+      if (Math.abs(c.bvy) > 55) {
+        c.bvy = -c.bvy * 0.4;
+        c.bvx *= 0.65;
+        puffDust(c.bx, bg, 3);
+      } else {
+        c.bvy = 0;
+        c.bvx *= 1 - 5 * dt;
+        c.brest = true;
+      }
+    }
+    if (c.t > 3.0) {
+      g.lives -= 1;
+      g.crash = null;
+      if (g.lives <= 0) {
+        finish({ wiped: true });
+        return;
+      }
+      g.wx = solidAfter(c.rx);
+      g.speed = 10;
+      g.vy = 0;
+      g.ang = 0;
+      g.air = false;
+      g.my = groundRow(g.wx + AXLE_DX) - WHEEL_R;
     }
   };
 
   const update = (dt) => {
+    if (g.over) return;
     if (g.popup && (g.popup.ttl -= dt) <= 0) g.popup = null;
-    if (g.crashT > 0) {
-      g.crashT -= dt;
+    for (const d of g.dust) {
+      d.ttl -= dt;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.vy += 60 * dt;
+    }
+    g.dust = g.dust.filter((d) => d.ttl > 0);
+
+    if (g.started) g.t += dt;
+    if (g.t > TIME_LIMIT) {
+      finish({ timeup: true });
       return;
     }
 
-    g.speed = Math.min(63, g.speed + 1.75 * dt);
-    g.wx += g.speed * dt;
-
-    const dist = g.wx / PX_PER_M;
-    if (dist >= FINISH_M) {
-      end({ score: score(), dist: FINISH_M, finished: true });
+    if (g.crash) {
+      updateCrash(dt);
       return;
     }
 
-    if (g.wx + W > g.nextObs) {
-      g.obstacles.push({ x: g.nextObs + W, w: 5, h: 7, weed: hash(g.nextObs) > 0.5 });
-      g.nextObs += 75 + Math.random() * 110;
-    }
-    g.obstacles = g.obstacles.filter((o) => o.x > g.wx - 20);
-
-    const wpx = g.wx + PX;
-    const gy = groundY(wpx);
+    const pedal = keys.has('ArrowRight');
+    const brake = keys.has('ArrowLeft');
+    const jump = keys.has('ArrowUp') || keys.has(' ');
+    const down = keys.has('ArrowDown');
 
     if (!g.air) {
-      g.py = gy;
-      g.ang = slopeAngle(wpx);
-      const jump = keys.has('ArrowUp') || keys.has(' ');
-      if (jump && !g.jumpHeld) {
+      // ---- grounded ----
+      const ref0 = groundRef(g.wx, g.wx + WHEELBASE);
+      const slope0 = ref0 ? (ref0.gyF - ref0.gyR) / (WHEELBASE * 2) : 0;
+      let acc = -4 - g.speed * 0.14 + slope0 * 75;
+      if (pedal) acc += 30;
+      if (brake) acc -= 85;
+      g.speed = Math.max(0, Math.min(MAX_SPEED, g.speed + acc * dt));
+      if (!g.started && g.speed > 2) g.started = true;
+      g.wx += g.speed * dt;
+      if (pedal) g.pedalPh += g.speed * dt * 0.16;
+      if (g.compress > 0) g.compress -= dt;
+
+      const takeOff = (vy) => {
         g.air = true;
-        g.vy = JUMP_V - g.speed * 0.24;
+        g.airT = 0;
+        g.vy = vy;
         g.spin = 0;
+        g.lockL = brake;
+        g.lockR = pedal;
+      };
+
+      const ref = groundRef(g.wx, g.wx + WHEELBASE);
+      const newMy = ref ? (ref.gyR + ref.gyF) / 2 - WHEEL_R : 0;
+
+      if (down && g.speed > 18 && ref) g.wheelieAcc += 26 * dt;
+      else bankWheelie();
+
+      if (ref && jump && !g.jumpHeld && g.speed > 6) {
+        // pressed on solid ground, including right on a ramp's lip
+        takeOff(-(100 + g.speed * 0.55));
+      } else if (!ref || newMy - g.my > 7) {
+        // ground fell away: carry the lip's own vertical momentum
+        takeOff(Math.max(-220, Math.min(60, g.gv * 1.3)));
+      } else {
+        g.gv = (newMy - g.my) / Math.max(dt, 1e-4);
+        g.my = newMy;
+        g.ang = ref.ang;
       }
       g.jumpHeld = jump;
-      for (const o of g.obstacles) {
-        if (Math.abs(o.x - wpx) < o.w) {
-          crash(o.weed ? 'TUMBLEWEEDED!' : 'ROCKED!');
-          return;
-        }
-      }
     } else {
+      // ---- airborne ----
+      g.speed = Math.max(0, g.speed - g.speed * 0.06 * dt);
+      g.wx += g.speed * dt;
       g.vy += GRAVITY * dt;
-      g.py += g.vy * dt;
-      const rot = 8.2 * dt;
-      if (keys.has('ArrowLeft')) {
-        g.ang -= rot;
-        g.spin -= rot;
-      }
-      if (keys.has('ArrowRight')) {
-        g.ang += rot;
-        g.spin += rot;
-      }
-      if (g.py >= gy) {
-        g.py = gy;
-        g.air = false;
-        const target = slopeAngle(wpx);
-        let diff = (g.ang - target) % (Math.PI * 2);
-        if (diff > Math.PI) diff -= Math.PI * 2;
-        if (diff < -Math.PI) diff += Math.PI * 2;
-        if (Math.abs(diff) > 0.95) {
-          crash('CASED IT!');
-          return;
-        }
-        const flips = Math.floor(Math.abs(g.spin) / (Math.PI * 2));
-        if (flips > 0) {
-          const pts = flips * 250;
-          g.tricks += pts;
-          g.popup = { text: `${g.spin < 0 ? 'BACK' : 'FRONT'}FLIP X${flips} +${pts}`, ttl: 1.6 };
-        }
-        g.ang = target;
-        g.spin = 0;
+      g.my += g.vy * dt;
+      // keys still held from before takeoff don't rotate until released
+      if (!brake) g.lockL = false;
+      if (!pedal) g.lockR = false;
+      const rot = 7.0 * dt;
+      if (brake && !g.lockL) { g.ang -= rot; g.spin -= rot; }
+      if (pedal && !g.lockR) { g.ang += rot; g.spin += rot; }
+      g.jumpHeld = jump;
+
+      g.airT += dt;
+      const cts = contacts();
+      const gr = holeAt(cts.rcx) ? CANYON_FLOOR : groundRow(cts.rcx);
+      const gf = holeAt(cts.fcx) ? CANYON_FLOOR : groundRow(cts.fcx);
+      if (g.airT > 0.12 && g.vy > 0 && (cts.rcy >= gr || cts.fcy >= gf)) {
+        land(cts);
+        if (g.crash || g.over) return;
       }
     }
+
+    if (g.wx >= FINISH_X) {
+      g.tricks += Math.max(0, Math.round((TIME_LIMIT - g.t) * 4)); // time bonus
+      finish({ finished: true });
+      return;
+    }
+
+    // camera: horizontal always, vertical only for big airs
+    const targetY = Math.max(-52, Math.min(0, g.my - 88));
+    g.camY += (targetY - g.camY) * Math.min(1, 5 * dt);
   };
 
-  // saguaro cactus with two arms
+  // ------------------------------------------------------------- drawing
+
   const drawCactus = (vic, x, y, h) => {
     vic.rect(x, y - h, 2, h, C.GREEN);
     vic.col(x, y - h, y, C.LIGHTGREEN);
-    // left arm: out then up
     vic.rect(x - 3, y - h + 5, 3, 2, C.GREEN);
     vic.rect(x - 3, y - h + 2, 1, 4, C.GREEN);
     vic.pset(x - 3, y - h + 2, C.LIGHTGREEN);
-    // right arm, lower
     vic.rect(x + 2, y - h + 8, 3, 2, C.GREEN);
     vic.rect(x + 4, y - h + 5, 1, 4, C.GREEN);
   };
@@ -209,119 +355,178 @@ export function createBmx({ keys, end }) {
     vic.bg = C.ORANGE;
     vic.clear(C.LIGHTBLUE);
 
-    // jagged black rock silhouette on the horizon
+    const camX = g.wx - PXS;
+    const camXi = Math.floor(camX);
+    const oy = Math.round(-g.camY);
+    const mtnY = 34 + Math.round(oy * 0.25);
+    const sandTop = mtnY + 4;
+
+    // ---- terrain, column by column ----
     for (let x = 0; x < W; x += 1) {
-      const r = 28 - hash(Math.floor((g.wx * 0.15 + x) / 2)) * 6;
-      vic.col(x, r, r + 4, C.BLACK);
-      vic.col(x, r + 4, HORIZON, C.DARKGREY);
-    }
+      const wx = camXi + x;
+      // distant mountain silhouette, 0.2x parallax
+      const ridge = mtnY - 5 - Math.floor(hash(Math.floor((camX * 0.2 + x) / 3)) * 9);
+      vic.col(x, ridge, ridge + 3, C.BLACK);
+      vic.col(x, ridge + 3, sandTop, C.DARKGREY);
 
-    // sandy field + log-fence track, column by column
-    for (let x = 0; x < W; x += 1) {
-      const wxc = g.wx + x;
-      const gy = groundY(wxc) | 0;
-      const d = (groundY(wxc + 2) - groundY(wxc - 2)) / 4;
-      const shadowed = d > 0.55; // steep downhill face sits in shadow
+      const stripe = ((wx % 4) + 4) % 4; // repeated vertical banding
 
-      vic.col(x, HORIZON, gy - 1, C.YELLOW);
-
-      // vertical logs, 2 fat px wide: lit column + shaded column,
-      // dark rounded cap, whole face darker inside gullies
-      const lit = Math.floor(wxc / 2) % 2 === 0;
-      vic.pset(x, gy - 1, shadowed ? C.BLACK : C.BROWN); // cap
-      const body = shadowed ? (lit ? C.BROWN : C.RED) : lit ? C.ORANGE : C.RED;
-      vic.col(x, gy, H, body);
-      // seam between logs every 2nd column
-      if (!lit) {
-        for (let y = gy + ((x & 1) << 1); y < H; y += 4) vic.pset(x, y, C.BROWN);
+      if (holeAt(wx)) {
+        // canyon gap: sand down to the lower ledge, then the far wall in
+        // shadow — same vertical banding as the track, drained of colour
+        const top = canyonTopRow(wx) + oy;
+        vic.col(x, sandTop, top, C.YELLOW);
+        vic.col(x, top, top + 2, C.BLACK);
+        let wall = C.DARKGREY;
+        if (stripe === 0) wall = C.BLACK;
+        else if (stripe === 2) wall = C.GREY;
+        vic.col(x, top + 2, CANYON_FLOOR + oy, wall);
+        vic.col(x, CANYON_FLOOR + oy, H, C.BLACK);
+        continue;
       }
+      const gy = groundRow(wx) + oy;
+      vic.col(x, sandTop, gy, C.YELLOW);
+      if (holeAt(wx - 1) || holeAt(wx + 1)) {
+        vic.col(x, gy, H, C.BLACK); // cliff-edge outline at gaps
+        continue;
+      }
+      // riding surface cap; steep downhill faces sit in shadow
+      const shadowed = groundRow(wx + 2) - groundRow(wx - 2) > 2.2;
+      vic.pset(x, gy, shadowed ? C.BROWN : C.LIGHTRED);
+      vic.pset(x, gy + 1, C.ORANGE);
+      // the side wall: burnt red with repeated dark vertical stripes
+      let body = C.RED;
+      if (stripe === 0) body = C.BROWN;
+      else if (stripe === 2) body = C.ORANGE;
+      vic.col(x, gy + 2, H, body);
     }
 
-    // field debris: rocks, orange scrub, dry bushes (world-anchored)
-    const k0 = Math.floor(g.wx / 14) - 1;
-    for (let k = k0; k < k0 + Math.ceil(W / 14) + 2; k += 1) {
-      const sx = Math.floor(k * 14 - g.wx + hash(k) * 10);
-      if (sx < -4 || sx > W + 4) continue;
-      const sy = HORIZON + 4 + Math.floor(hash(k * 3.7) * 100);
-      if (sy > groundY(g.wx + sx) - 8) continue;
+    // ---- desert dithering: authored pixel clusters, 0.65x parallax ----
+    const dbase = camX * 0.65;
+    const k0 = Math.floor(dbase / 12) - 1;
+    for (let k = k0; k < k0 + Math.ceil(W / 12) + 2; k += 1) {
+      const sx = Math.floor(k * 12 - dbase + hash(k) * 9);
+      if (sx < 0 || sx >= W) continue;
+      const gy = (holeAt(camXi + sx) ? canyonTopRow(camXi + sx) : groundRow(camXi + sx)) + oy;
+      const sy = sandTop + 4 + Math.floor(hash(k * 3.7) * 110);
+      if (sy > gy - 5) continue;
       const kind = hash(k * 9.1);
-      if (kind < 0.4) {
-        vic.rect(sx, sy, 2, 1, C.ORANGE);
-        vic.pset(sx + 2, sy - 1, C.ORANGE);
-      } else if (kind < 0.7) {
-        vic.rect(sx, sy, 2, 1, C.GREY);
-        vic.pset(sx + 1, sy - 1, C.LIGHTGREY);
-      } else {
-        vic.pset(sx, sy, C.BROWN);
+      if (kind < 0.35) {
+        vic.rect(sx, sy, 2, 1, C.ORANGE); // small rock
         vic.pset(sx + 1, sy - 1, C.BROWN);
-        vic.pset(sx + 2, sy, C.BROWN);
-      }
-    }
-
-    // saguaros, light parallax
-    const span = W + 60;
-    for (let i = 0; i < 3; i += 1) {
-      const sx = Math.floor(((((i * 170 - g.wx * 0.7) % span) + span) % span) - 30);
-      const ty = 66 + hash(i * 11.3) * 36;
-      if (ty < groundY(g.wx + sx) - 4) drawCactus(vic, sx, ty, 12 + Math.floor(hash(i * 5.1) * 5));
-    }
-
-    // spectators standing behind the log wall
-    const SHIRTS = [C.BLUE, C.RED, C.WHITE];
-    for (let i = 0; i < 3; i += 1) {
-      const sx = Math.floor(((((i * 210 + 100 - g.wx) % (W + 100)) + (W + 100)) % (W + 100)) - 30);
-      if (sx < -6 || sx > W + 6) continue;
-      const sy = (groundY(g.wx + sx) | 0) - 1;
-      vic.rect(sx - 1, sy - 8, 5, 5, SHIRTS[i % 3]);
-      vic.rect(sx, sy - 11, 3, 3, C.ORANGE);
-    }
-
-    // obstacles
-    for (const o of g.obstacles) {
-      const sx = o.x - g.wx;
-      if (sx < -10 || sx > W + 10) continue;
-      const gy = groundY(o.x);
-      if (o.weed) {
-        vic.circle(sx, gy - 3, 3, C.GREEN);
-        vic.pset(sx - 1, gy - 5, C.LIGHTGREEN);
-        vic.pset(sx + 1, gy - 3, C.LIGHTGREEN);
+      } else if (kind < 0.6) {
+        vic.pset(sx, sy, C.BROWN); // stipple cluster
+        vic.pset(sx + 2, sy + 1, C.BROWN);
+        vic.pset(sx + 1, sy + 2, C.ORANGE);
+      } else if (kind < 0.8) {
+        vic.rect(sx, sy - 1, 1, 2, C.GREEN); // scrub
+        vic.pset(sx - 1, sy, C.GREEN);
+        vic.pset(sx + 1, sy, C.GREEN);
       } else {
-        vic.rect(sx - 2, gy - o.h, o.w, o.h, C.DARKGREY);
-        vic.rect(sx - 1, gy - o.h + 1, 2, 2, C.LIGHTGREY);
+        vic.pset(sx, sy, C.GREY); // pebbles
+        vic.pset(sx + 1, sy, C.LIGHTGREY);
       }
     }
 
-    // finish flag
-    const fx = FINISH_M * PX_PER_M - g.wx + PX;
-    if (fx < W + 10) {
-      const gy = groundY(FINISH_M * PX_PER_M + PX);
-      vic.rect(fx, gy - 30, 1, 30, C.WHITE);
-      vic.rect(fx + 1, gy - 30, 7, 6, C.RED);
+    // ---- cacti, 0.55x parallax, always behind the track ----
+    const span = W + 70;
+    for (let i = 0; i < 3; i += 1) {
+      const sx = Math.floor(((((i * 173 - camX * 0.55) % span) + span) % span) - 35);
+      const ty = sandTop + 22 + Math.floor(hash(i * 11.3) * 50);
+      if (sx > -6 && sx < W + 6 && ty < groundRow(camXi + sx) + oy - 5) {
+        drawCactus(vic, sx, ty, 12 + Math.floor(hash(i * 5.1) * 5));
+      }
     }
 
-    // rider: two overlaid sprites, stepped rotation frames
-    const ang = g.crashT > 0 ? g.crashT * 10 : g.ang;
-    const fi = ((Math.round((ang / (Math.PI * 2)) * N_FRAMES) % N_FRAMES) + N_FRAMES) % N_FRAMES;
-    const sx = PX - 13;
-    const sy = g.py - 20;
-    vic.sprite(BIKE_F[fi], sx, sy, BIKE_COLORS);
-    vic.sprite(RIDER_F[fi], sx, sy, RIDER_COLORS);
+    // ---- finish banner ----
+    const fx = FINISH_X - camXi;
+    if (fx > -34 && fx < W + 34) {
+      const gy = groundRow(FINISH_X) + oy;
+      const top = gy - 40;
+      vic.rect(fx - 13, top, 2, 40, C.WHITE); // posts
+      vic.rect(fx + 13, top, 2, 40, C.WHITE);
+      vic.rect(fx - 13, top, 28, 1, C.BLACK);
+      // checkered banner, 2x2 blocks so the pattern survives at this size
+      for (let cy = 0; cy < 4; cy += 1) {
+        for (let cx = 0; cx < 12; cx += 1) {
+          vic.rect(fx - 11 + cx * 2, top + 1 + cy * 2, 2, 2,
+            (cx + cy) % 2 ? C.BLACK : C.WHITE);
+        }
+      }
+    }
 
-    if (g.popup) vic.text(g.popup.text, W / 2 - vic.textWidth(g.popup.text) / 2, 54, C.WHITE);
+    // ---- dust ----
+    for (const d of g.dust) vic.pset(d.x, d.y + oy, C.LIGHTGREY);
 
-    // HUD: paired Casio boxes, yellow digits in the bottom bar
-    vic.hudBox('BMX', W / 2 - 22);
-    vic.hudBox(`${Math.min(FINISH_M, Math.round(g.wx / PX_PER_M))}M`, W / 2 + 18);
+    // ---- rider / crash sprites (hardware-sprite layer) ----
+    if (g.crash) {
+      const c = g.crash;
+      // at rest the bike lies upside down, wheels up, as in the sheet
+      vic.sprite(
+        BIKE_ROT[c.brest ? N_ROT / 2 : frameOf(c.bspin)],
+        Math.round(c.bx - camX) - S / 2, Math.round(c.by + oy) - S / 2, COLORS,
+      );
+      // rider: tumbles while he is moving, then sits up, then stands
+      let riderGrid;
+      if (c.t > 2.25) riderGrid = GETUP;
+      else if (c.t > 1.55) riderGrid = SIT;
+      else riderGrid = TUMBLE_ROT[frameOf(-c.t * 7)];
+      vic.sprite(
+        riderGrid,
+        Math.round(c.rx - camX) - S / 2,
+        Math.round(c.ry + oy) - FOOT_Y,
+        COLORS,
+      );
+    } else {
+      let pose;
+      let ang = g.ang;
+      let mx = g.wx + AXLE_DX;
+      let my = g.my;
+      if (g.air) {
+        pose = 'air';
+      } else if (g.compress > 0 || (keys.has('ArrowUp') && g.speed > 6)) {
+        pose = 'crouch';
+      } else if (keys.has('ArrowDown') && g.speed > 18) {
+        // wheelie: nose up, pivoting on the rear wheel contact
+        pose = 'coast';
+        ang = -0.42;
+        const gyR = groundRow(g.wx);
+        mx = g.wx + AXLE_DX * Math.cos(ang);
+        my = gyR - WHEEL_R + WHEELBASE * Math.sin(ang);
+      } else if (keys.has('ArrowRight') && g.speed < MAX_SPEED - 1) {
+        pose = `pedal${Math.floor(g.pedalPh) % 4}`;
+      } else {
+        pose = 'coast';
+      }
+      vic.sprite(
+        POSES[pose][frameOf(ang)],
+        Math.round(mx - camX) - S / 2, Math.round(my + oy) - S / 2, COLORS,
+      );
+    }
+
+    if (g.popup) {
+      vic.text(g.popup.text, W / 2 - vic.textWidth(g.popup.text) / 2, 52, C.WHITE);
+    }
+
+    // ---- CASIO HUD, fixed to the screen ----
+    const secs = Math.max(0, TIME_LIMIT - g.t);
+    const clock = `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
+    vic.hudBox('CASIO', W / 2 - 24);
+    vic.hudBox(clock, W / 2 + 20);
     for (let i = 0; i < g.lives; i += 1) {
       vic.orect(W - 9 - i * 8, 5, 6, 1, C.RED);
       vic.opset(W - 9 - i * 8, 7, C.BLACK);
       vic.opset(W - 5 - i * 8, 7, C.BLACK);
     }
     vic.orect(0, H - 10, W, 10, C.BLACK);
-    vic.text(`${Math.round(g.speed)}`, 3, H - 8, C.YELLOW);
+    vic.text(`SPD ${Math.round(g.speed)}`, 3, H - 8, C.YELLOW);
+    const mid = `${distM()}M`;
+    vic.text(mid, W / 2 - vic.textWidth(mid) / 2, H - 8, C.WHITE);
     const sc = `${score()}`;
     vic.text(sc, W - vic.textWidth(sc) - 3, H - 8, C.YELLOW);
   };
 
-  return { update, draw, score };
+  // _g exposes the rider state so a course can be driven headlessly
+  // (drop the bike at a world x, step update(), assert) without a canvas
+  return { update, draw, score, _g: g };
 }
