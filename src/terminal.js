@@ -25,6 +25,17 @@ function mazeLines(rows = 6, cols = 38) {
   return lines;
 }
 
+const WAVES = [
+  { art: '<<<<~~~~~-----        A LEFT PEELS ACROSS THE POINT', key: 'l' },
+  { art: '        -----~~~~~>>>>  A RIGHT WALLS UP AHEAD', key: 'r' },
+  { art: '(((( O ))))           THE LIP THROWS. IT IS BARRELING', key: 't' },
+  { art: 'XXXX~~~~XXXX          CLOSEOUT. THE WHOLE WAVE FOLDS', key: 'k' },
+];
+
+const SURF_PRAISE = ['GNARLY.', 'TUBULAR.', 'STYLE POINTS.', 'THE BEACH GOES WILD.', 'RADICAL.'];
+
+const SURF_MOVES = '(L)EFT / (R)IGHT / (T)UBE / (K)ICK OUT:';
+
 const listOutput = () => [
   '10 REM ***** CAREER.BAS *****',
   ...EXPERIENCE.map(
@@ -178,12 +189,30 @@ export class Terminal {
     const cmd = raw.toLowerCase().replace(/[?!.]+$/, '').trim();
 
     if (this.game) {
-      await this.landerTurn(cmd);
+      if (this.game.type === 'surf') await this.surfTurn(cmd);
+      else await this.landerTurn(cmd);
       return;
     }
 
-    if (cmd === 'lander' || cmd === 'play' || cmd === 'game') {
+    if (cmd === 'lander') {
       await this.startLander();
+      return;
+    }
+
+    if (cmd === 'surf' || /california/.test(cmd)) {
+      await this.startSurf();
+      return;
+    }
+
+    if (cmd === 'play' || cmd === 'game' || cmd === 'games' || cmd === 'arcade') {
+      await this.stream([
+        'CASSETTE 1 — GAMES:',
+        '',
+        '  LANDER ... land on the moon, 1969 style',
+        '  SURF ..... shred a gnarly wave, 1987 style',
+        '',
+        'TYPE ONE TO LOAD IT.',
+      ]);
       return;
     }
 
@@ -268,7 +297,7 @@ export class Terminal {
   }
 
   async startLander() {
-    this.game = { alt: 1000, vel: 50, fuel: 150, turn: 1 };
+    this.game = { type: 'lander', alt: 1000, vel: 50, fuel: 150, turn: 1 };
     await this.stream(
       [
         'LUNAR LANDER — (C) 1969, PORTED FROM PURE NOSTALGIA',
@@ -326,6 +355,114 @@ export class Terminal {
     if (g.vel < 0) flavor.push('YOU ARE CLIMBING. THE MOON IS THE OTHER WAY.');
 
     await this.stream([...flavor, ...this.landerStatus()], { cps: 600 });
+  }
+
+  surfStatus() {
+    const g = this.game;
+    return [
+      `WAVE ${g.round}/8  ·  SCORE ${g.score}  ·  BOARDS ${'▮'.repeat(g.boards)}`,
+      '',
+      WAVES[g.wave].art,
+      '',
+      SURF_MOVES,
+    ];
+  }
+
+  nextWave() {
+    this.game.wave = Math.floor(Math.random() * WAVES.length);
+  }
+
+  async startSurf() {
+    this.game = { type: 'surf', round: 1, score: 0, streak: 0, boards: 3 };
+    this.nextWave();
+    await this.stream(
+      [
+        'SURF — A TOTALLY UNOFFICIAL TRIBUTE TO 1987',
+        '',
+        'READ THE WAVE. PICK THE MOVE. EIGHT WAVES.',
+        '  LEFT PEELING? CARVE (L)EFT.',
+        '  RIGHT WALLING UP? CARVE (R)IGHT.',
+        '  BARRELING? PULL INTO THE (T)UBE.',
+        '  CLOSEOUT? (K)ICK OUT OR EAT SAND.',
+        'WRONG MOVE SNAPS A BOARD. YOU HAVE 3.',
+        '(TYPE QUIT TO PADDLE IN)',
+        '',
+        ...this.surfStatus(),
+      ],
+      { cps: 600 },
+    );
+  }
+
+  async endSurf(drowned) {
+    const { score } = this.game;
+    this.game = null;
+    const rank =
+      score >= 900 ? 'RANK: SPONSORED. THE 80S WOULD BE PROUD.'
+      : score >= 600 ? 'RANK: TOTALLY RAD.'
+      : score >= 300 ? 'RANK: WEEKEND SURFER.'
+      : 'RANK: KOOK. THE LIFEGUARD KNOWS YOUR NAME NOW.';
+    await this.stream(
+      [
+        drowned ? 'ALL BOARDS SNAPPED. THE OCEAN WINS TODAY.' : 'SESSION OVER. YOU PADDLE IN, ARMS LIKE NOODLES.',
+        '',
+        `FINAL SCORE: ${score}`,
+        rank,
+        '',
+        'TYPE SURF TO PADDLE BACK OUT.',
+        'READY.',
+      ],
+      { cps: 400 },
+    );
+  }
+
+  async surfTurn(cmd) {
+    const g = this.game;
+
+    if (['quit', 'exit', 'abort', 'clear'].includes(cmd)) {
+      this.game = null;
+      await this.stream(['YOU PADDLE IN. THE WAVES KEEP ROLLING.', 'READY.']);
+      return;
+    }
+
+    const MOVE_WORDS = {
+      l: 'l', left: 'l',
+      r: 'r', right: 'r',
+      t: 't', tube: 't',
+      k: 'k', kick: 'k', 'kick out': 'k',
+    };
+    const move = MOVE_WORDS[cmd];
+    if (!move) {
+      await this.stream(['THAT IS NOT A SURF MOVE.', '', ...this.surfStatus()], { cps: 600 });
+      return;
+    }
+
+    const lines = [];
+    if (move === WAVES[g.wave].key) {
+      g.streak += 1;
+      const points = 100 + (g.streak - 1) * 50;
+      g.score += points;
+      lines.push(`${SURF_PRAISE[Math.floor(Math.random() * SURF_PRAISE.length)]} +${points}${g.streak > 1 ? ` (STREAK X${g.streak})` : ''}`);
+    } else {
+      g.boards -= 1;
+      g.streak = 0;
+      lines.push('WIPEOUT! THE WAVE FOLDS YOU LIKE A DECKCHAIR.');
+      if (g.boards === 0) {
+        await this.stream(lines, { cps: 500 });
+        await this.endSurf(true);
+        return;
+      }
+      lines.push(`BOARDS LEFT: ${g.boards}.`);
+    }
+
+    if (g.round === 8) {
+      await this.stream(lines, { cps: 500 });
+      await this.endSurf(false);
+      return;
+    }
+
+    g.round += 1;
+    this.nextWave();
+    await this.stream([...lines, '', ...this.surfStatus()], { cps: 600 });
   }
 
   async boot() {

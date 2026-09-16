@@ -89,6 +89,7 @@ export const RESPONSES = {
     '  PROJECTS .... side quests (crypto wallet inside)',
     '  CONTACT ..... where to find him',
     '  LANDER ...... land on the moon, 1969 style',
+    '  SURF ........ shred a gnarly wave, 1987 style',
     '  CLEAR ....... wipe the screen',
     '',
     'OR JUST ASK ME ANYTHING IN PLAIN ENGLISH.',
