@@ -110,6 +110,38 @@ export function runGame(host, createGame) {
 
 // ---- shared drawing helpers ------------------------------------------------
 
+// cheap deterministic noise
+export const hash = (n) => {
+  const s = Math.sin(n * 127.1) * 43758.5453;
+  return s - Math.floor(s);
+};
+
+// white Casio-style box with a blue border, like the reference HUD
+export function hudBox(ctx, text, cx = W / 2) {
+  ctx.font = '8px "Silkscreen", monospace';
+  ctx.textBaseline = 'top';
+  const w = ctx.measureText(text).width + 10;
+  const x = Math.round(cx - w / 2);
+  ctx.fillStyle = '#2929c7';
+  ctx.fillRect(x - 2, 3, w + 4, 15);
+  ctx.fillStyle = C64.white;
+  ctx.fillRect(x, 5, w, 11);
+  ctx.fillStyle = C64.black;
+  ctx.fillText(text, x + 5, 7);
+}
+
+// black status bar along the bottom, white text left + right
+export function statusBar(ctx, left, right) {
+  ctx.fillStyle = C64.black;
+  ctx.fillRect(0, H - 12, W, 12);
+  ctx.font = '8px "Silkscreen", monospace';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = C64.white;
+  ctx.fillText(left, 5, H - 10);
+  const w = ctx.measureText(right).width;
+  ctx.fillText(right, W - w - 5, H - 10);
+}
+
 export function skyBands(ctx, horizon) {
   const bands = [C64.lightblue, C64.lightblue, C64.cyan, C64.cyan, C64.lightgreen];
   const bh = horizon / bands.length;

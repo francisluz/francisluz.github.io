@@ -1,7 +1,14 @@
 // SURF — ride the wave face, stay in the pocket near the crest,
 // dodge the rolling foam. 60-second session, 3 boards.
+// Look modeled on late-80s EGA surf games: flat cyan sky, deep
+// speckled ocean, jagged foam crest, chunky board-first sprite.
 
-import { W, H, C64, skyBands, hudText, dither } from './engine.js';
+import { W, H, C64, hudText, hudBox, statusBar, hash } from './engine.js';
+
+const SKY = '#4fc8dc';
+const WATER = '#2c33c4';
+const WATER_LIGHT = '#4d55e6';
+const WATER_DEEP = '#1d2287';
 
 const SESSION = 60;
 const PLAYER_X_MIN = 30;
@@ -17,11 +24,14 @@ export function createSurf({ keys, end }) {
     boards: 3,
     px: 120,
     py: 90,
+    vx: 0,
+    vy: 0,
     tumble: 0,
     bogTimer: 0,
-    foam: null, // rolling foam ball section
+    foam: null,
     nextFoam: 4,
     popup: null,
+    spray: [],
   };
 
   const wipeout = (reason) => {
@@ -29,7 +39,6 @@ export function createSurf({ keys, end }) {
     g.tumble = 1.3;
     g.popup = { text: reason, ttl: 1.6 };
     if (g.boards <= 0) {
-      // let the tumble play out, then report
       setTimeout(() => end({ score: Math.round(g.score), wiped: true }), 900);
     }
   };
@@ -37,6 +46,13 @@ export function createSurf({ keys, end }) {
   const update = (dt) => {
     g.t += dt;
     if (g.popup && (g.popup.ttl -= dt) <= 0) g.popup = null;
+
+    for (const p of g.spray) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.ttl -= dt;
+    }
+    g.spray = g.spray.filter((p) => p.ttl > 0);
 
     if (g.t >= SESSION) {
       end({ score: Math.round(g.score) });
@@ -54,27 +70,35 @@ export function createSurf({ keys, end }) {
 
     // steering
     const sp = 68;
-    if (keys.has('ArrowLeft')) g.px -= sp * dt;
-    if (keys.has('ArrowRight')) g.px += sp * dt;
-    if (keys.has('ArrowUp')) g.py -= sp * dt;
-    if (keys.has('ArrowDown')) g.py += sp * dt;
+    g.vx = (keys.has('ArrowRight') ? sp : 0) - (keys.has('ArrowLeft') ? sp : 0);
+    g.vy = (keys.has('ArrowDown') ? sp : 0) - (keys.has('ArrowUp') ? sp : 0);
+    g.px += g.vx * dt;
+    g.py += g.vy * dt;
     // the face constantly pushes you down and toward the beach
     g.py += 14 * dt;
     g.px -= 7 * dt;
     g.px = Math.max(PLAYER_X_MIN, Math.min(PLAYER_X_MAX, g.px));
 
+    // wake spray off the tail while carving
+    if (Math.abs(g.vx) + Math.abs(g.vy) > 10 || Math.random() < 0.4) {
+      g.spray.push({
+        x: g.px - 8 + Math.random() * 4,
+        y: g.py + 3 + Math.random() * 3,
+        vx: -30 - Math.random() * 25,
+        vy: 8 + Math.random() * 18,
+        ttl: 0.5 + Math.random() * 0.4,
+      });
+    }
+
     const crest = crestY(g.px, g.t);
     const depth = g.py - crest;
 
-    // over the falls
     if (depth < 2) {
       wipeout('OVER THE FALLS!');
       return;
     }
-    // bottom of screen = flats
-    if (g.py > H - 12) g.py = H - 12;
+    if (g.py > H - 22) g.py = H - 22;
 
-    // pocket scoring: sweet zone just under the crest
     if (depth >= 4 && depth <= 26) {
       g.score += (46 - depth) * dt * 2.2;
       g.bogTimer = 0;
@@ -103,7 +127,7 @@ export function createSurf({ keys, end }) {
       else {
         const dx = g.foam.x - g.px;
         const dy = g.foam.y - g.py;
-        if (dx * dx + dy * dy < (g.foam.r + 4) ** 2) {
+        if (dx * dx + dy * dy < (g.foam.r + 5) ** 2) {
           g.foam = null;
           wipeout('MOWED BY THE FOAM!');
         }
@@ -111,49 +135,78 @@ export function createSurf({ keys, end }) {
     }
   };
 
-  const drawSurfer = (ctx, x, y, tumbling) => {
+  // chunky surfer seen from behind, board leading down the face
+  const drawSurfer = (ctx) => {
     ctx.save();
-    ctx.translate(x, y);
-    if (tumbling) ctx.rotate(g.tumble * 12);
-    ctx.fillStyle = C64.yellow; // board
-    ctx.fillRect(-7, 2, 14, 2);
-    ctx.fillStyle = C64.black; // legs
-    ctx.fillRect(-2, -3, 2, 5);
-    ctx.fillRect(1, -3, 2, 5);
-    ctx.fillStyle = C64.red; // torso
-    ctx.fillRect(-2, -8, 5, 5);
-    ctx.fillStyle = C64.lightred; // arms out
-    ctx.fillRect(-6, -7, 4, 2);
-    ctx.fillRect(3, -6, 4, 2);
-    ctx.fillStyle = C64.orange; // head
-    ctx.fillRect(-1, -12, 3, 4);
+    ctx.translate(g.px, g.py);
+    if (g.tumble > 0) ctx.rotate(g.tumble * 12);
+    else ctx.rotate(-0.5 + g.vy * 0.003 + g.vx * 0.002);
+
+    // board: yellow with red nose, angled down the line
+    ctx.fillStyle = C64.yellow;
+    ctx.fillRect(-11, 2, 22, 4);
+    ctx.fillStyle = '#d43d1a';
+    ctx.fillRect(8, 2, 4, 4);
+    ctx.fillRect(-11, 2, 3, 4);
+    // legs (skin), bent into a crouch
+    ctx.fillStyle = C64.orange;
+    ctx.fillRect(-4, -3, 3, 6);
+    ctx.fillRect(2, -4, 3, 7);
+    // wetsuit torso, leaning forward
+    ctx.fillStyle = C64.black;
+    ctx.fillRect(-3, -10, 7, 8);
+    // arms out for balance
+    ctx.fillStyle = C64.orange;
+    ctx.fillRect(-10, -9, 7, 2);
+    ctx.fillRect(4, -12, 7, 2);
+    // head + hair
+    ctx.fillRect(-1, -15, 4, 5);
+    ctx.fillStyle = '#4a2c14';
+    ctx.fillRect(-1, -16, 4, 2);
     ctx.restore();
   };
 
   const draw = (ctx) => {
-    skyBands(ctx, 46);
+    // flat cyan sky
+    ctx.fillStyle = SKY;
+    ctx.fillRect(0, 0, W, H);
 
-    // wave face, column by column
+    // wave, column by column: jagged foam crest, lit face, deep water
+    const frame = Math.floor(g.t * 3);
     for (let x = 0; x < W; x += 1) {
       const c = crestY(x, g.t);
-      ctx.fillStyle = C64.blue;
-      ctx.fillRect(x, c, 1, H - c);
-      ctx.fillStyle = C64.lightblue;
-      ctx.fillRect(x, c + 2, 1, 14);
+      const foamH = 2 + hash(x * 7.3 + frame) * 5;
       ctx.fillStyle = C64.white;
-      ctx.fillRect(x, c, 1, 2);
+      ctx.fillRect(x, c - 1, 1, foamH + 1);
+      ctx.fillStyle = WATER_LIGHT;
+      ctx.fillRect(x, c + foamH, 1, 12);
+      ctx.fillStyle = WATER;
+      ctx.fillRect(x, c + foamH + 12, 1, H - c);
+      ctx.fillStyle = WATER_DEEP;
+      ctx.fillRect(x, Math.max(c + 20, H - 26), 1, 26);
     }
-    // deep-water texture
-    dither(ctx, 0, 120, W, H - 120, C64.black, 0.12, 3);
+
+    // ocean speckle texture, stable with a slow shimmer
+    ctx.fillStyle = C64.white;
+    for (let i = 0; i < 420; i += 1) {
+      const sx = Math.floor(hash(i * 13.7) * W);
+      const sy = Math.floor(hash(i * 71.3) * H);
+      if (sy > crestY(sx, g.t) + 9 && hash(i + frame) > 0.35) {
+        ctx.fillRect(sx, sy, 1, 1);
+      }
+    }
 
     // curl ball riding the crest on the right
     const cx = 258 + Math.sin(g.t * 1.7) * 16;
     const cy = crestY(cx, g.t) - 2;
     ctx.fillStyle = C64.white;
     ctx.beginPath();
-    ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
     ctx.fill();
-    dither(ctx, cx - 14, cy - 8, 28, 16, C64.cyan, 0.35, 1);
+    ctx.fillStyle = SKY;
+    for (let i = 0; i < 26; i += 1) {
+      ctx.fillRect(cx - 12 + hash(i * 3.1 + frame) * 24, cy - 10 + hash(i * 9.7) * 18, 1, 1);
+    }
 
     // rolling foam section
     if (g.foam) {
@@ -161,33 +214,44 @@ export function createSurf({ keys, end }) {
       ctx.beginPath();
       ctx.arc(g.foam.x, g.foam.y, g.foam.r, 0, Math.PI * 2);
       ctx.fill();
-      dither(ctx, g.foam.x - g.foam.r, g.foam.y - g.foam.r, g.foam.r * 2, g.foam.r * 2, C64.lightblue, 0.3, 2);
+      ctx.fillStyle = WATER_LIGHT;
+      for (let i = 0; i < 18; i += 1) {
+        ctx.fillRect(
+          g.foam.x - g.foam.r + hash(i * 5.3 + frame) * g.foam.r * 2,
+          g.foam.y - g.foam.r + hash(i * 8.9) * g.foam.r * 2,
+          1,
+          1,
+        );
+      }
     }
 
-    // spray when carving
-    if (g.tumble <= 0 && (keys.size > 0 || Math.random() < 0.3)) {
-      dither(ctx, g.px - 10, g.py + 2, 8, 5, C64.white, 0.5, (g.t * 60) | 0);
-    }
+    // spray trail
+    ctx.fillStyle = C64.white;
+    for (const p of g.spray) ctx.fillRect(p.x, p.y, 2, 2);
 
-    drawSurfer(ctx, g.px, g.py, g.tumble > 0);
+    drawSurfer(ctx);
 
-    // pocket hint: subtle sparkle under the crest at player's x
     const pc = crestY(g.px, g.t);
     if (g.py - pc > 30 && g.tumble <= 0) {
-      hudText(ctx, '^ POCKET UP THERE ^', g.px - 40, pc + 6, C64.yellow);
+      hudText(ctx, '^ POCKET UP THERE ^', g.px - 40, pc + 8, C64.yellow);
     }
+    if (g.bogTimer > 0.5) hudText(ctx, 'PADDLE UP!', g.px - 22, g.py - 26, C64.lightred);
+    if (g.popup) hudText(ctx, g.popup.text, W / 2 - 50, 54, C64.lightred);
 
-    // HUD
-    hudText(ctx, `SCORE ${Math.round(g.score)}`, 6, 5);
-    hudText(ctx, `BOARDS ${'#'.repeat(Math.max(0, g.boards))}`, 6, 16, C64.yellow);
+    // HUD, reference style
     const left = Math.max(0, SESSION - g.t);
-    ctx.fillStyle = C64.black;
-    ctx.fillRect(W - 70, 6, 62, 6);
-    ctx.fillStyle = C64.lightgreen;
-    ctx.fillRect(W - 69, 7, 60 * (left / SESSION), 4);
-    if (g.popup) hudText(ctx, g.popup.text, W / 2 - 50, 60, C64.lightred);
-    if (g.bogTimer > 0.5) hudText(ctx, 'PADDLE UP!', g.px - 22, g.py - 24, C64.lightred);
-    hudText(ctx, 'ARROWS RIDE · ESC QUITS', 6, H - 12, C64.lightgrey);
+    const mm = Math.floor(left / 60);
+    const ss = String(Math.floor(left % 60)).padStart(2, '0');
+    hudBox(ctx, `SURF ${mm}:${ss}`, 52);
+    hudText(ctx, `SCORE ${Math.round(g.score)}`, W - 84, 7);
+    // remaining boards as mini boards
+    for (let i = 0; i < g.boards; i += 1) {
+      ctx.fillStyle = C64.yellow;
+      ctx.fillRect(W - 84 + i * 12, 19, 9, 3);
+      ctx.fillStyle = '#d43d1a';
+      ctx.fillRect(W - 84 + i * 12 + 7, 19, 2, 3);
+    }
+    statusBar(ctx, 'CONTESTANT FRANCIS', 'ESC QUITS');
   };
 
   return { update, draw, score: () => Math.round(g.score) };
